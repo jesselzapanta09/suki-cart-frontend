@@ -1,0 +1,2 @@
+# SukiCart Frontend v2
+

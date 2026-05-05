@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+html,
+body,
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+}
+
+/* ── SukiCart Theme ── */
+@theme {
+  --font-display: 'Sora', sans-serif;
+  --font-body:    'DM Sans', sans-serif;
+  --font-mono:    'JetBrains Mono', monospace;
+
+  /* Green palette replacing rail-* blue */
+  --color-rail-500:  #22c55e;
+  --color-rail-600:  #16a34a;
+  --color-rail-700:  #15803d;
+  --color-rail-800:  #166534;
+  --color-rail-900:  #14532d;
+  --color-rail-950:  #052e16;
+
+  --color-steel-400: #8795aa;
+  --color-steel-500: #677890;
+  --color-steel-600: #536078;
+  --color-steel-700: #444f62;
+
+  --animate-fade-in:   fadeIn 0.4s ease forwards;
+  --animate-slide-up:  slideUp 0.4s ease forwards;
+  --animate-pulse-dot: pulseDot 2s infinite;
+}
+
+/* Base styles */
+body {
+  font-family: var(--font-body);
+  margin: 0;
+  color: #000;
+  min-height: 100%;
+  position: relative;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Utility override for text-white */
+.text-white { color: #fff !important; }
+
+@media (max-width: 640px) {
+  .profile-edit-tabs > .ant-tabs-nav .ant-tabs-nav-wrap {
+    overflow: visible !important;
+  }
+
+  .profile-edit-tabs > .ant-tabs-nav .ant-tabs-nav-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    transform: none !important;
+    width: 100%;
+  }
+
+  .profile-edit-tabs > .ant-tabs-nav .ant-tabs-tab {
+    align-items: center;
+    display: flex;
+    flex: 1 1 calc(50% - 0.25rem);
+    justify-content: center;
+    margin: 0 !important;
+    text-align: center;
+    white-space: normal;
+  }
+
+  .profile-edit-tabs > .ant-tabs-nav .ant-tabs-tab-btn {
+    width: 100%;
+  }
+
+  .profile-edit-tabs > .ant-tabs-nav .ant-tabs-ink-bar,
+  .profile-edit-tabs > .ant-tabs-nav .ant-tabs-nav-operations {
+    display: none !important;
+  }
+}

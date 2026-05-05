@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Suki Cart</title>
+    <script>
+      (function () {
+        var link = document.createElement('link');
+        link.rel = 'icon';
+        link.type = 'image/png';
+        link.href = new URL('/suki-cart-logo.png', window.location.origin).href;
+        document.head.appendChild(link);
+      })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    
+    <script>
+      (function () {
+        var redirect = sessionStorage.getItem('redirect');
+        if (redirect) {
+          sessionStorage.removeItem('redirect');
+          history.replaceState(null, null, redirect);
+        }
+      })();
+    </script>
+
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      if (window.location.protocol === 'file:') {
+        var cordovaScript = document.createElement('script');
+        cordovaScript.src = 'cordova.js';
+        document.body.appendChild(cordovaScript);
+      }
+    </script>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
