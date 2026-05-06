@@ -6,7 +6,7 @@ import { UploadOutlined } from "@ant-design/icons"
 import { getCategories as getPublicCategories } from "../../../services/authService"
 import * as productService from "../../../services/productService"
 import { getStorageUrl } from "../../../utils/storage"
-import { debugFormData, resolveUploadFile } from "../../../utils/upload"
+import { cloneFileForUpload, debugFormData } from "../../../utils/upload"
 
 function getStatusTag(status) {
   if (status === "active") return <Tag color="green">Active</Tag>
@@ -79,13 +79,13 @@ export default function ProductFormPage({ mode }) {
   const [categories, setCategories] = useState([])
   const [pageLoading, setPageLoading] = useState(isEdit)
   const [submitLoading, setSubmitLoading] = useState(false)
-  const [imagesPreparing, setImagesPreparing] = useState(false)
+  const [imagePreparingCount, setImagePreparingCount] = useState(0)
   const [imageList, setImageList] = useState([])
   const [existingImages, setExistingImages] = useState([])
   const [deletedImageIds, setDeletedImageIds] = useState([])
   const [product, setProduct] = useState(null)
-  const uploadSyncIdRef = useRef(0)
   const stableUploadFilesRef = useRef(new Map())
+  const imagesPreparing = imagePreparingCount > 0
   const totalImageCount = existingImages.length + imageList.length
   const hasUploadSlots = totalImageCount < 5
 
@@ -102,13 +102,12 @@ export default function ProductFormPage({ mode }) {
 
   useEffect(() => {
     if (!isEdit) {
-      uploadSyncIdRef.current += 1
       stableUploadFilesRef.current = new Map()
       setProduct(null)
       setExistingImages([])
       setDeletedImageIds([])
       setImageList([])
-      setImagesPreparing(false)
+      setImagePreparingCount(0)
       return
     }
 
@@ -116,13 +115,12 @@ export default function ProductFormPage({ mode }) {
     productService.getProduct(uuid)
       .then((data) => {
         const nextProduct = data.product
-        uploadSyncIdRef.current += 1
         stableUploadFilesRef.current = new Map()
         setProduct(nextProduct)
         setExistingImages(nextProduct.images || [])
         setDeletedImageIds([])
         setImageList([])
-        setImagesPreparing(false)
+        setImagePreparingCount(0)
       })
       .catch((err) => {
         console.error("Failed to load product:", err)
@@ -159,61 +157,60 @@ export default function ProductFormPage({ mode }) {
     if (fields.length > 0) form.setFields(fields)
   }
 
-  const handleUploadChange = async ({ fileList }) => {
-    const availableSlots = Math.max(0, 5 - existingImages.length)
-    const nextFileList = fileList.slice(0, availableSlots)
-
-    if (fileList.length > availableSlots) {
+  const handleBeforeUpload = async (file) => {
+    if (existingImages.length + imageList.length >= 5) {
       message.warning("A product can only have up to 5 images")
+      return Upload.LIST_IGNORE
     }
 
-    const uploadSyncId = ++uploadSyncIdRef.current
-    setImagesPreparing(true)
+    setImagePreparingCount((count) => count + 1)
 
     try {
-      const unresolvedUploads = []
-      const nextStableUploadFiles = new Map()
-      const stableFileList = await Promise.all(nextFileList.map(async (uploadFile, index) => {
-        const stableFile = await resolveUploadFile(uploadFile, stableUploadFilesRef.current.get(uploadFile.uid) ?? null)
+      const stableFile = await cloneFileForUpload(file)
 
-        if (stableFile) {
-          nextStableUploadFiles.set(uploadFile.uid, stableFile)
-        } else {
-          unresolvedUploads.push(uploadFile.name || `image-${index + 1}`)
-        }
-
-        return stableFile
-          ? {
-            ...uploadFile,
-            name: uploadFile.name || stableFile.name || `image-${index + 1}`,
-            originFileObj: stableFile,
-          }
-          : uploadFile
-      }))
-
-      if (uploadSyncIdRef.current !== uploadSyncId) return
-
-      if (unresolvedUploads.length > 0) {
-        console.warn("[product-upload] unresolved files", unresolvedUploads, nextFileList)
-        message.error(`Some images could not be prepared: ${unresolvedUploads.join(", ")}`)
+      if (!stableFile) {
+        message.error(`Failed to prepare ${file.name || "the selected image"}. Please choose it again.`)
+        return Upload.LIST_IGNORE
       }
 
-      stableUploadFilesRef.current = nextStableUploadFiles
-      const preparedFileList = stableFileList.filter(Boolean)
+      stableUploadFilesRef.current.set(file.uid, stableFile)
 
-      setImageList(preparedFileList)
-      form.setFieldValue("images", preparedFileList)
+      setImageList((prev) => {
+        const nextList = [
+          ...prev.filter((item) => item.uid !== file.uid),
+          {
+            uid: file.uid,
+            status: "done",
+            name: file.name || stableFile.name || `image-${prev.length + 1}`,
+            originFileObj: stableFile,
+          },
+        ].slice(0, Math.max(0, 5 - existingImages.length))
+
+        form.setFieldValue("images", nextList)
+        return nextList
+      })
+
       form.validateFields(["images"]).catch(() => { })
     } catch (error) {
-      if (uploadSyncIdRef.current !== uploadSyncId) return
-
       console.error("Failed to prepare product images:", error)
-      message.error("Failed to prepare the selected image. Please choose it again.")
+      message.error(`Failed to prepare ${file.name || "the selected image"}. Please choose it again.`)
     } finally {
-      if (uploadSyncIdRef.current === uploadSyncId) {
-        setImagesPreparing(false)
-      }
+      setImagePreparingCount((count) => Math.max(0, count - 1))
     }
+
+    return Upload.LIST_IGNORE
+  }
+
+  const handleRemoveSelectedImage = (file) => {
+    stableUploadFilesRef.current.delete(file.uid)
+    setImageList((prev) => {
+      const nextList = prev.filter((item) => item.uid !== file.uid)
+      form.setFieldValue("images", nextList)
+      return nextList
+    })
+    form.validateFields(["images"]).catch(() => { })
+    message.success("Selected image removed.")
+    return true
   }
 
   const handleRemoveExistingImage = (imageId) => {
@@ -790,11 +787,8 @@ export default function ProductFormPage({ mode }) {
                   <Upload
                     listType="picture-card"
                     fileList={imageList}
-                    onChange={handleUploadChange}
-                    onRemove={() => {
-                      message.success("Selected image removed.")
-                    }}
-                    beforeUpload={() => false}
+                    onRemove={handleRemoveSelectedImage}
+                    beforeUpload={handleBeforeUpload}
                     multiple
                     accept="image/*"
                     disabled={!hasUploadSlots || imagesPreparing}

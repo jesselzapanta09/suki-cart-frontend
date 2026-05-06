@@ -6,6 +6,7 @@ import { ShoppingBag, Truck, Wallet, ArrowLeft, Loader2, Mail, CheckCircle } fro
 import AddressSelect from "../../components/AddressSelect";
 import { registerCustomer, resendVerification } from "../../services/authService";
 import { sukiCartLogoHome } from "../../utils/logos";
+import { cloneFileForUpload } from "../../utils/upload";
 
 const STEPS = [
     { title: "" },
@@ -78,6 +79,8 @@ export default function RegisterCustomer() {
     const [loading, setLoading] = useState(false);
     const [registeredEmail, setRegisteredEmail] = useState(null);
     const [resending, setResending] = useState(false);
+    const [profilePictureList, setProfilePictureList] = useState([]);
+    const [uploadPreparing, setUploadPreparing] = useState(false);
 
     const STEP_FIELDS = [
         ["firstName", "lastName", "contactNumber", "profilePicture"],
@@ -92,9 +95,48 @@ export default function RegisterCustomer() {
         } catch { /* validation shows inline */ }
     };
 
+    const handleProfilePictureBeforeUpload = async (file) => {
+        setUploadPreparing(true);
+
+        try {
+            const stableFile = await cloneFileForUpload(file);
+
+            if (!stableFile) {
+                setProfilePictureList([]);
+                form.setFieldValue("profilePicture", []);
+                message.error("Failed to prepare the selected profile picture. Please choose it again.");
+                return Upload.LIST_IGNORE;
+            }
+
+            const nextList = [{
+                uid: file.uid,
+                status: "done",
+                originFileObj: stableFile,
+                name: file.name || stableFile.name || "profile-picture.jpg",
+            }];
+
+            setProfilePictureList(nextList);
+            form.setFieldValue("profilePicture", nextList);
+            form.validateFields(["profilePicture"]).catch(() => { });
+        } catch (error) {
+            console.error("Failed to prepare customer profile picture:", error);
+            setProfilePictureList([]);
+            form.setFieldValue("profilePicture", []);
+            message.error("Failed to prepare the selected profile picture. Please choose it again.");
+        } finally {
+            setUploadPreparing(false);
+        }
+
+        return Upload.LIST_IGNORE;
+    };
+
     const onFinish = async () => {
         // getFieldsValue(true) returns ALL stored values including unmounted step fields
         const values = form.getFieldsValue(true);
+        if (uploadPreparing) {
+            message.warning("Please wait for the selected image to finish preparing.");
+            return;
+        }
         setLoading(true);
         try {
             await registerCustomer(values);
@@ -196,14 +238,26 @@ export default function RegisterCustomer() {
                                         <Input size="large" placeholder="09123456789" />
                                     </Form.Item>
                                     <Form.Item label="Profile Picture" name="profilePicture" valuePropName="fileList" getValueFromEvent={e => Array.isArray(e) ? e : e?.fileList} rules={[{ required: true, message: "Please upload a photo" }]}>
-                                        <Upload maxCount={1} beforeUpload={() => false} accept="image/*" listType="picture-card" onPreview={(file) => { const src = file.url || file.thumbUrl || (file.originFileObj && URL.createObjectURL(file.originFileObj)); if (src) { const w = window.open(); w.document.write(`<img src="${src}" style="max-width:100%" />`); } }}>
+                                        <Upload
+                                            maxCount={1}
+                                            beforeUpload={handleProfilePictureBeforeUpload}
+                                            accept="image/*"
+                                            listType="picture-card"
+                                            fileList={profilePictureList}
+                                            onRemove={() => {
+                                                setProfilePictureList([]);
+                                                form.setFieldValue("profilePicture", []);
+                                            }}
+                                            onPreview={(file) => { const src = file.url || file.thumbUrl || (file.originFileObj && URL.createObjectURL(file.originFileObj)); if (src) { const w = window.open(); w.document.write(`<img src="${src}" style="max-width:100%" />`); } }}
+                                            disabled={uploadPreparing}
+                                        >
                                             <div className="flex flex-col items-center">
                                                 <UploadOutlined className="text-xl text-green-600" />
-                                                <div className="mt-1 text-xs text-gray-500">Upload Photo</div>
+                                                <div className="mt-1 text-xs text-gray-500">{uploadPreparing ? "Preparing..." : "Upload Photo"}</div>
                                             </div>
                                         </Upload>
                                     </Form.Item>
-                                    <Button type="primary" size="large" block className="h-12 rounded-xl font-semibold" onClick={handleNext} icon={<ArrowRightOutlined />} iconPlacement="end">
+                                    <Button type="primary" size="large" block className="h-12 rounded-xl font-semibold" onClick={handleNext} icon={<ArrowRightOutlined />} iconPlacement="end" disabled={uploadPreparing}>
                                         Continue to Address
                                     </Button>
                             </div>
@@ -246,7 +300,7 @@ export default function RegisterCustomer() {
                                             </Button>
                                         </Col>
                                         <Col xs={12}>
-                                            <Button type="primary" htmlType="submit" size="large" block className="h-12 rounded-xl font-semibold" loading={loading}>
+                                            <Button type="primary" htmlType="submit" size="large" block className="h-12 rounded-xl font-semibold" loading={loading} disabled={uploadPreparing}>
                                                 {loading ? "Creating…" : "Create Account"}
                                             </Button>
                                         </Col>

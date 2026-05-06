@@ -6,6 +6,7 @@ import { ShoppingBag, Truck, TrendingUp, ArrowLeft, Loader2, Mail, CheckCircle }
 import AddressSelect from "../../components/AddressSelect";
 import { registerSeller, resendVerification, getCategories } from "../../services/authService";
 import { sukiCartLogoHome } from "../../utils/logos";
+import { cloneFileForUpload } from "../../utils/upload";
 
 const STEPS = [
     { title: "" },
@@ -80,6 +81,10 @@ export default function RegisterSeller() {
     const [registeredEmail, setRegisteredEmail] = useState(null);
     const [resending, setResending] = useState(false);
     const [categories, setCategories] = useState([]);
+    const [profilePictureList, setProfilePictureList] = useState([]);
+    const [storeBannerList, setStoreBannerList] = useState([]);
+    const [profilePreparing, setProfilePreparing] = useState(false);
+    const [bannerPreparing, setBannerPreparing] = useState(false);
 
     useEffect(() => {
         getCategories()
@@ -101,9 +106,83 @@ export default function RegisterSeller() {
         } catch { /* inline validation */ }
     };
 
+    const handleProfilePictureBeforeUpload = async (file) => {
+        setProfilePreparing(true);
+
+        try {
+            const stableFile = await cloneFileForUpload(file);
+
+            if (!stableFile) {
+                setProfilePictureList([]);
+                form.setFieldValue("profilePicture", []);
+                message.error("Failed to prepare the selected profile picture. Please choose it again.");
+                return Upload.LIST_IGNORE;
+            }
+
+            const nextList = [{
+                uid: file.uid,
+                status: "done",
+                originFileObj: stableFile,
+                name: file.name || stableFile.name || "profile-picture.jpg",
+            }];
+
+            setProfilePictureList(nextList);
+            form.setFieldValue("profilePicture", nextList);
+            form.validateFields(["profilePicture"]).catch(() => { });
+        } catch (error) {
+            console.error("Failed to prepare seller profile picture:", error);
+            setProfilePictureList([]);
+            form.setFieldValue("profilePicture", []);
+            message.error("Failed to prepare the selected profile picture. Please choose it again.");
+        } finally {
+            setProfilePreparing(false);
+        }
+
+        return Upload.LIST_IGNORE;
+    };
+
+    const handleStoreBannerBeforeUpload = async (file) => {
+        setBannerPreparing(true);
+
+        try {
+            const stableFile = await cloneFileForUpload(file);
+
+            if (!stableFile) {
+                setStoreBannerList([]);
+                form.setFieldValue("storeBanner", []);
+                message.error("Failed to prepare the selected banner. Please choose it again.");
+                return Upload.LIST_IGNORE;
+            }
+
+            const nextList = [{
+                uid: file.uid,
+                status: "done",
+                originFileObj: stableFile,
+                name: file.name || stableFile.name || "store-banner.jpg",
+            }];
+
+            setStoreBannerList(nextList);
+            form.setFieldValue("storeBanner", nextList);
+            form.validateFields(["storeBanner"]).catch(() => { });
+        } catch (error) {
+            console.error("Failed to prepare seller store banner:", error);
+            setStoreBannerList([]);
+            form.setFieldValue("storeBanner", []);
+            message.error("Failed to prepare the selected banner. Please choose it again.");
+        } finally {
+            setBannerPreparing(false);
+        }
+
+        return Upload.LIST_IGNORE;
+    };
+
     const onFinish = async () => {
         // getFieldsValue(true) returns ALL stored values including unmounted step fields
         const values = form.getFieldsValue(true);
+        if (profilePreparing || bannerPreparing) {
+            message.warning("Please wait for the selected images to finish preparing.");
+            return;
+        }
         setLoading(true);
         try {
             await registerSeller(values);
@@ -205,14 +284,26 @@ export default function RegisterSeller() {
                                         <Input size="large" placeholder="09123456789" />
                                     </Form.Item>
                                     <Form.Item label="Profile Picture" name="profilePicture" valuePropName="fileList" getValueFromEvent={e => Array.isArray(e) ? e : e?.fileList} rules={[{ required: true, message: "Please upload a photo" }]}>
-                                        <Upload maxCount={1} beforeUpload={() => false} accept="image/*" listType="picture-card" onPreview={(file) => { const src = file.url || file.thumbUrl || (file.originFileObj && URL.createObjectURL(file.originFileObj)); if (src) { const w = window.open(); w.document.write(`<img src="${src}" style="max-width:100%" />`); } }}>
+                                        <Upload
+                                            maxCount={1}
+                                            beforeUpload={handleProfilePictureBeforeUpload}
+                                            accept="image/*"
+                                            listType="picture-card"
+                                            fileList={profilePictureList}
+                                            onRemove={() => {
+                                                setProfilePictureList([]);
+                                                form.setFieldValue("profilePicture", []);
+                                            }}
+                                            onPreview={(file) => { const src = file.url || file.thumbUrl || (file.originFileObj && URL.createObjectURL(file.originFileObj)); if (src) { const w = window.open(); w.document.write(`<img src="${src}" style="max-width:100%" />`); } }}
+                                            disabled={profilePreparing}
+                                        >
                                             <div className="flex flex-col items-center">
                                                 <UploadOutlined className="text-xl text-green-600" />
-                                                <div className="mt-1 text-xs text-gray-500">Upload Photo</div>
+                                                <div className="mt-1 text-xs text-gray-500">{profilePreparing ? "Preparing..." : "Upload Photo"}</div>
                                             </div>
                                         </Upload>
                                     </Form.Item>
-                                    <Button type="primary" size="large" block className="h-12 rounded-xl font-semibold" onClick={handleNext} icon={<ArrowRightOutlined />} iconPlacement="end">
+                                    <Button type="primary" size="large" block className="h-12 rounded-xl font-semibold" onClick={handleNext} icon={<ArrowRightOutlined />} iconPlacement="end" disabled={profilePreparing}>
                                         Continue to Store Info
                                     </Button>
                             </div>
@@ -229,16 +320,28 @@ export default function RegisterSeller() {
                                         <Input.TextArea size="large" placeholder="Tell customers about your store..." rows={3} />
                                     </Form.Item>
                                     <Form.Item label="Store Banner" name="storeBanner" valuePropName="fileList" getValueFromEvent={e => Array.isArray(e) ? e : e?.fileList} rules={[{ required: true, message: "Please upload a banner" }]} className="mb-6">
-                                        <Upload maxCount={1} beforeUpload={() => false} accept="image/*" listType="picture-card" onPreview={(file) => { const src = file.url || file.thumbUrl || (file.originFileObj && URL.createObjectURL(file.originFileObj)); if (src) { const w = window.open(); w.document.write(`<img src="${src}" style="max-width:100%" />`); } }}>
+                                        <Upload
+                                            maxCount={1}
+                                            beforeUpload={handleStoreBannerBeforeUpload}
+                                            accept="image/*"
+                                            listType="picture-card"
+                                            fileList={storeBannerList}
+                                            onRemove={() => {
+                                                setStoreBannerList([]);
+                                                form.setFieldValue("storeBanner", []);
+                                            }}
+                                            onPreview={(file) => { const src = file.url || file.thumbUrl || (file.originFileObj && URL.createObjectURL(file.originFileObj)); if (src) { const w = window.open(); w.document.write(`<img src="${src}" style="max-width:100%" />`); } }}
+                                            disabled={bannerPreparing}
+                                        >
                                             <div className="flex flex-col items-center">
                                                 <UploadOutlined className="text-xl text-green-600" />
-                                                <div className="mt-1 text-xs text-gray-500">Upload Banner</div>
+                                                <div className="mt-1 text-xs text-gray-500">{bannerPreparing ? "Preparing..." : "Upload Banner"}</div>
                                             </div>
                                         </Upload>
                                     </Form.Item>
                                     <Row gutter={16}>
                                         <Col xs={12}><Button size="large" block className="h-12 rounded-xl font-semibold" onClick={() => setStep(0)} icon={<ArrowLeft size={16} />}>Back</Button></Col>
-                                        <Col xs={12}><Button type="primary" size="large" block className="h-12 rounded-xl font-semibold" onClick={handleNext} icon={<ArrowRightOutlined />} iconPlacement="end">Continue</Button></Col>
+                                        <Col xs={12}><Button type="primary" size="large" block className="h-12 rounded-xl font-semibold" onClick={handleNext} icon={<ArrowRightOutlined />} iconPlacement="end" disabled={bannerPreparing}>Continue</Button></Col>
                                     </Row>
                             </div>
 
@@ -267,7 +370,7 @@ export default function RegisterSeller() {
                                     </Form.Item>
                                     <Row gutter={16}>
                                         <Col xs={12}><Button size="large" block className="h-12 rounded-xl font-semibold" onClick={() => setStep(2)} icon={<ArrowLeft size={16} />}>Back</Button></Col>
-                                        <Col xs={12}><Button type="primary" htmlType="submit" size="large" block className="h-12 rounded-xl font-semibold" loading={loading}>{loading ? "Creating…" : "Create Store"}</Button></Col>
+                                        <Col xs={12}><Button type="primary" htmlType="submit" size="large" block className="h-12 rounded-xl font-semibold" loading={loading} disabled={profilePreparing || bannerPreparing}>{loading ? "Creating…" : "Create Store"}</Button></Col>
                                     </Row>
                             </div>
                         </Form>

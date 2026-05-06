@@ -1,12 +1,17 @@
 import api from './api';
+import { appendUploadFile, debugFormData, extractSingleUploadFile } from '../utils/upload';
 
-function extractFile(uploadValue) {
-    if (!uploadValue) return null;
-    const list = Array.isArray(uploadValue) ? uploadValue : uploadValue.fileList ?? [];
-    return list[0]?.originFileObj ?? null;
+async function resolveRequiredUpload(uploadValue, fieldLabel) {
+    const file = await extractSingleUploadFile(uploadValue);
+
+    if (!file) {
+        throw new Error(`Please choose ${fieldLabel} again before submitting.`);
+    }
+
+    return file;
 }
 
-export function registerCustomer(values) {
+export async function registerCustomer(values) {
     const fd = new FormData();
     fd.append('firstname', values.firstName ?? '');
     fd.append('lastname', values.lastName ?? '');
@@ -19,13 +24,14 @@ export function registerCustomer(values) {
     fd.append('password', values.password ?? '');
     fd.append('password_confirmation', values.passwordConfirmation ?? '');
 
-    const pic = extractFile(values.profilePicture);
-    if (pic) fd.append('profile_picture', pic);
+    const pic = await resolveRequiredUpload(values.profilePicture, 'a profile picture');
+    appendUploadFile(fd, 'profile_picture', pic, 'profile-picture.jpg');
 
+    debugFormData(fd, 'register-customer');
     return api.post('/register/customer', fd);
 }
 
-export function registerSeller(values) {
+export async function registerSeller(values) {
     const fd = new FormData();
     fd.append('firstname', values.firstName ?? '');
     fd.append('lastname', values.lastName ?? '');
@@ -41,12 +47,13 @@ export function registerSeller(values) {
     fd.append('password', values.password ?? '');
     fd.append('password_confirmation', values.passwordConfirmation ?? '');
 
-    const pic = extractFile(values.profilePicture);
-    if (pic) fd.append('profile_picture', pic);
+    const pic = await resolveRequiredUpload(values.profilePicture, 'a profile picture');
+    appendUploadFile(fd, 'profile_picture', pic, 'profile-picture.jpg');
 
-    const banner = extractFile(values.storeBanner);
-    if (banner) fd.append('store_banner', banner);
+    const banner = await resolveRequiredUpload(values.storeBanner, 'a store banner');
+    appendUploadFile(fd, 'store_banner', banner, 'store-banner.jpg');
 
+    debugFormData(fd, 'register-seller');
     return api.post('/register/seller', fd);
 }
 
@@ -73,4 +80,3 @@ export function resetPassword(token, password, password_confirmation) {
 export function getCategories() {
     return api.get('/categories');
 }
-

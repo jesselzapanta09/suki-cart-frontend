@@ -4,7 +4,7 @@ function isString(value) {
   return typeof value === "string" && value.length > 0
 }
 
-function isBlobLike(value) {
+export function isBlobLike(value) {
   return typeof Blob !== "undefined" && value instanceof Blob
 }
 
@@ -67,6 +67,86 @@ function getUploadLastModified(source) {
   }
 
   return Date.now()
+}
+
+export function getUploadFilename(source, fallbackName = "upload") {
+  return getUploadName(source, fallbackName)
+}
+
+function delay(ms) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
+
+function isRetriableReadError(error) {
+  const name = String(error?.name || "")
+  const message = String(error?.message || "").toLowerCase()
+
+  return (
+    name === "NotReadableError"
+    || name === "InvalidStateError"
+    || message.includes("could not be read")
+    || message.includes("permission problems")
+    || message.includes("not readable")
+  )
+}
+
+function readBlobAsArrayBufferWithFileReader(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => reject(reader.error ?? new Error("Failed to read upload source"))
+    reader.readAsArrayBuffer(blob)
+  })
+}
+
+async function readBlobAsArrayBuffer(blob) {
+  if (typeof blob?.arrayBuffer === "function") {
+    try {
+      return await blob.arrayBuffer()
+    } catch (error) {
+      if (!isRetriableReadError(error)) {
+        throw error
+      }
+    }
+  }
+
+  return readBlobAsArrayBufferWithFileReader(blob)
+}
+
+async function readBlobAsArrayBufferWithRetry(blob) {
+  const delays = [0, 120, 250, 500]
+  let lastError = null
+
+  for (let attempt = 0; attempt < delays.length; attempt += 1) {
+    if (delays[attempt] > 0) {
+      await delay(delays[attempt])
+    }
+
+    try {
+      const sourceBlob = typeof blob?.slice === "function"
+        ? blob.slice(0, blob.size, blob.type)
+        : blob
+
+      return await readBlobAsArrayBuffer(sourceBlob)
+    } catch (error) {
+      lastError = error
+
+      if (!isRetriableReadError(error) || attempt === delays.length - 1) {
+        throw error
+      }
+
+      console.warn("[upload] retrying unreadable file", {
+        attempt: attempt + 1,
+        nextDelayMs: delays[attempt + 1],
+        name: error?.name,
+        message: error?.message,
+      })
+    }
+  }
+
+  throw lastError ?? new Error("Failed to read upload source")
 }
 
 function createStableUploadValue(buffer, name, type, lastModified) {
@@ -141,7 +221,7 @@ export async function cloneFileForUpload(source, options = {}) {
       return source
     }
 
-    const buffer = await source.arrayBuffer()
+    const buffer = await readBlobAsArrayBufferWithRetry(source)
     const stableFile = createStableUploadValue(
       buffer,
       getUploadName(source, fallbackName),
@@ -193,6 +273,56 @@ export async function resolveUploadFile(uploadFile, fallbackSource = null) {
   }
 
   return null
+}
+
+export async function extractSingleUploadFile(uploadValue) {
+  if (!uploadValue) {
+    return null
+  }
+
+  if (isBlobLike(uploadValue) || isString(uploadValue)) {
+    return cloneFileForUpload(uploadValue)
+  }
+
+  const candidate = Array.isArray(uploadValue)
+    ? uploadValue[0]
+    : Array.isArray(uploadValue?.fileList)
+      ? uploadValue.fileList[0]
+      : uploadValue
+
+  if (!candidate) {
+    return null
+  }
+
+  if (isBlobLike(candidate) || isString(candidate)) {
+    return cloneFileForUpload(candidate)
+  }
+
+  return resolveUploadFile(candidate)
+}
+
+export function appendUploadFile(formData, key, file, fallbackName = "upload") {
+  if (!formData || !isBlobLike(file)) {
+    return false
+  }
+
+  const filename = getUploadFilename(file, fallbackName)
+  formData.append(key, file, filename)
+  return true
+}
+
+export function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    if (!isBlobLike(file)) {
+      resolve("")
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ""))
+    reader.onerror = () => reject(reader.error ?? new Error("Failed to read file preview"))
+    reader.readAsDataURL(file)
+  })
 }
 
 export function debugFormData(formData, label = "FormData") {

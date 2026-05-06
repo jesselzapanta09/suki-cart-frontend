@@ -8,6 +8,7 @@ import { Upload as UploadIcon } from "lucide-react"
 import * as profileService from "../../services/profileService"
 import { getHomeCategories } from "../../services/categoryService"
 import { getStorageUrl } from "../../utils/storage"
+import { cloneFileForUpload, readFileAsDataUrl } from "../../utils/upload"
 
 export default function EditProfile() {
     const { message } = App.useApp()
@@ -87,15 +88,23 @@ export default function EditProfile() {
     }, [loading, profile, populateForms])
 
     // --- Avatar handlers ---
-    const handleAvatarChange = (file) => {
+    const handleAvatarChange = async (file) => {
         const allowed = ["image/jpeg", "image/png", "image/webp"]
         if (!allowed.includes(file.type)) { message.error("Only JPG, PNG, WebP allowed."); return false }
         if (file.size > 5 * 1024 * 1024) { message.error("Max 5MB."); return false }
-        const reader = new FileReader()
-        reader.onload = (e) => setAvatarPreview(e.target.result)
-        reader.readAsDataURL(file)
-        setAvatarFile(file)
-        setRemoveAvatar(false)
+
+        try {
+            const stableFile = await cloneFileForUpload(file)
+            const preview = await readFileAsDataUrl(stableFile)
+
+            setAvatarPreview(preview)
+            setAvatarFile(stableFile)
+            setRemoveAvatar(false)
+        } catch (error) {
+            console.error("Failed to prepare profile picture:", error)
+            message.error("Failed to prepare the selected profile photo. Please choose it again.")
+        }
+
         return false
     }
 
@@ -106,15 +115,23 @@ export default function EditProfile() {
     }
 
     // --- Banner handlers ---
-    const handleBannerChange = (file) => {
+    const handleBannerChange = async (file) => {
         const allowed = ["image/jpeg", "image/png", "image/webp"]
         if (!allowed.includes(file.type)) { message.error("Only JPG, PNG, WebP allowed."); return false }
         if (file.size > 5 * 1024 * 1024) { message.error("Max 5MB."); return false }
-        const reader = new FileReader()
-        reader.onload = (e) => setBannerPreview(e.target.result)
-        reader.readAsDataURL(file)
-        setBannerFile(file)
-        setRemoveBanner(false)
+
+        try {
+            const stableFile = await cloneFileForUpload(file)
+            const preview = await readFileAsDataUrl(stableFile)
+
+            setBannerPreview(preview)
+            setBannerFile(stableFile)
+            setRemoveBanner(false)
+        } catch (error) {
+            console.error("Failed to prepare store banner:", error)
+            message.error("Failed to prepare the selected banner. Please choose it again.")
+        }
+
         return false
     }
 

@@ -5,6 +5,7 @@ import { ArrowRightOutlined, UploadOutlined } from "@ant-design/icons"
 import Avatar from "../../../components/Avatar"
 import AddressSelect from "../../../components/AddressSelect"
 import { getStorageUrl } from "../../../utils/storage"
+import { cloneFileForUpload, readFileAsDataUrl } from "../../../utils/upload"
 
 const STORE_CATEGORIES = [
     { label: "Convenience Store / Sari-Sari", value: "convenience" },
@@ -32,6 +33,8 @@ export default function UserModal({ open, onClose, onSubmit, initialValues, load
     const [removeAvatar, setRemoveAvatar] = useState(false)
     const [previewUser, setPreviewUser] = useState(null)
     const [addressInitial, setAddressInitial] = useState(null)
+    const [bannerFileList, setBannerFileList] = useState([])
+    const [bannerPreparing, setBannerPreparing] = useState(false)
 
     const labelClass = "text-sm font-medium text-gray-700"
     const inputClass = "w-full rounded-xl border border-gray-300"
@@ -55,6 +58,7 @@ export default function UserModal({ open, onClose, onSubmit, initialValues, load
         setAvatarFile(null)
         setRemoveAvatar(false)
         setAddressInitial(null)
+        setBannerPreparing(false)
         if (initialValues) {
             setAvatarPreview(initialValues.profile_picture ? getStorageUrl(initialValues.profile_picture) : null)
             setPreviewUser(initialValues)
@@ -67,9 +71,13 @@ export default function UserModal({ open, onClose, onSubmit, initialValues, load
                     barangay: loc.barangay,
                 })
             }
+            setBannerFileList(initialValues.store?.banner
+                ? [{ uid: "-1", name: "banner", status: "done", url: getStorageUrl(initialValues.store.banner) }]
+                : [])
         } else {
             setAvatarPreview(null)
             setPreviewUser(null)
+            setBannerFileList([])
         }
     } else if (!open && prevOpen) {
         setPrevOpen(false)
@@ -99,19 +107,28 @@ export default function UserModal({ open, onClose, onSubmit, initialValues, load
                 })
             } else {
                 form.resetFields()
+                setBannerFileList([])
             }
         }
     }, [open, initialValues, form])
 
-    const handleAvatarChange = (file) => {
+    const handleAvatarChange = async (file) => {
         const allowed = ["image/jpeg", "image/png", "image/webp"]
         if (!allowed.includes(file.type)) { message.error("Only JPG, PNG, WebP allowed."); return false }
         if (file.size > 5 * 1024 * 1024) { message.error("Max 5MB."); return false }
-        const reader = new FileReader()
-        reader.onload = (e) => setAvatarPreview(e.target.result)
-        reader.readAsDataURL(file)
-        setAvatarFile(file)
-        setRemoveAvatar(false)
+
+        try {
+            const stableFile = await cloneFileForUpload(file)
+            const preview = await readFileAsDataUrl(stableFile)
+
+            setAvatarPreview(preview)
+            setAvatarFile(stableFile)
+            setRemoveAvatar(false)
+        } catch (error) {
+            console.error("Failed to prepare profile picture:", error)
+            message.error("Failed to prepare the selected profile photo. Please choose it again.")
+        }
+
         return false
     }
 
@@ -128,6 +145,40 @@ export default function UserModal({ open, onClose, onSubmit, initialValues, load
         return []
     }
 
+    const handleBannerBeforeUpload = async (file) => {
+        setBannerPreparing(true)
+
+        try {
+            const stableFile = await cloneFileForUpload(file)
+
+            if (!stableFile) {
+                setBannerFileList([])
+                form.setFieldValue("store_banner", [])
+                message.error("Failed to prepare the selected banner. Please choose it again.")
+                return Upload.LIST_IGNORE
+            }
+
+            const nextList = [{
+                uid: file.uid,
+                status: "done",
+                originFileObj: stableFile,
+                name: file.name || stableFile.name || "store-banner.jpg",
+            }]
+
+            setBannerFileList(nextList)
+            form.setFieldValue("store_banner", nextList)
+        } catch (error) {
+            console.error("Failed to prepare store banner:", error)
+            setBannerFileList([])
+            form.setFieldValue("store_banner", [])
+            message.error("Failed to prepare the selected banner. Please choose it again.")
+        } finally {
+            setBannerPreparing(false)
+        }
+
+        return Upload.LIST_IGNORE
+    }
+
     const handleNext = async () => {
         try {
             await form.validateFields(getStepFields(step))
@@ -137,16 +188,16 @@ export default function UserModal({ open, onClose, onSubmit, initialValues, load
 
     const handleOk = async () => {
         try {
+            if (bannerPreparing) {
+                message.warning("Please wait for the selected banner to finish preparing.")
+                return
+            }
+
             const values = await form.validateFields()
             if (mode === "edit" && !values.password) delete values.password
             if (avatarFile) values.profile_picture = avatarFile
             if (removeAvatar) values.remove_picture = "true"
-            const bannerList = form.getFieldValue("store_banner")
-            if (bannerList?.[0]?.originFileObj) {
-                values.store_banner = bannerList[0].originFileObj
-            } else {
-                delete values.store_banner
-            }
+            values.store_banner = bannerFileList
             onSubmit(values)
         } catch { /* validation errors shown */ }
     }
@@ -321,10 +372,10 @@ export default function UserModal({ open, onClose, onSubmit, initialValues, load
                         </Form.Item>
 
                         <Form.Item name="store_banner" label={<span className={labelClass}>Store Banner <span className="font-normal text-gray-400">(optional)</span></span>} valuePropName="fileList" getValueFromEvent={e => Array.isArray(e) ? e : e?.fileList}>
-                            <Upload maxCount={1} beforeUpload={() => false} accept="image/*" listType="picture-card" onPreview={(file) => { const src = file.url || file.thumbUrl || (file.originFileObj && URL.createObjectURL(file.originFileObj)); if (src) { const w = window.open(); w.document.write(`<img src="${src}" style="max-width:100%" />`); } }} className="[&_.ant-upload-select]:h-32! [&_.ant-upload-select]:w-full! sm:[&_.ant-upload-select]:w-28!">
+                            <Upload maxCount={1} beforeUpload={handleBannerBeforeUpload} accept="image/*" listType="picture-card" fileList={bannerFileList} onRemove={() => { setBannerFileList([]); form.setFieldValue("store_banner", []); }} onPreview={(file) => { const src = file.url || file.thumbUrl || (file.originFileObj && URL.createObjectURL(file.originFileObj)); if (src) { const w = window.open(); w.document.write(`<img src="${src}" style="max-width:100%" />`); } }} disabled={bannerPreparing} className="[&_.ant-upload-select]:h-32! [&_.ant-upload-select]:w-full! sm:[&_.ant-upload-select]:w-28!">
                                 <div className="flex flex-col items-center">
                                     <UploadOutlined className="text-xl text-green-600" />
-                                    <div className="mt-1 text-xs text-gray-500">Upload Banner</div>
+                                    <div className="mt-1 text-xs text-gray-500">{bannerPreparing ? "Preparing..." : "Upload Banner"}</div>
                                 </div>
                             </Upload>
                         </Form.Item>
