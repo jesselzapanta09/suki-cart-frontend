@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react"
+import React, { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useParams, Link } from "react-router-dom"
 import { App, Button, Form, Input, InputNumber, Select, Spin, Tag, Upload, Grid as AntGrid } from "antd"
 import { ArrowLeft, Grid, ImagePlus, Layers, Package, RotateCcw, Save, Sliders, Trash2 } from "lucide-react"
@@ -6,6 +6,7 @@ import { UploadOutlined } from "@ant-design/icons"
 import { getCategories as getPublicCategories } from "../../../services/authService"
 import * as productService from "../../../services/productService"
 import { getStorageUrl } from "../../../utils/storage"
+import { stabilizeUploadFile } from "../../../utils/upload"
 
 function getStatusTag(status) {
   if (status === "active") return <Tag color="green">Active</Tag>
@@ -78,10 +79,12 @@ export default function ProductFormPage({ mode }) {
   const [categories, setCategories] = useState([])
   const [pageLoading, setPageLoading] = useState(isEdit)
   const [submitLoading, setSubmitLoading] = useState(false)
+  const [imagesPreparing, setImagesPreparing] = useState(false)
   const [imageList, setImageList] = useState([])
   const [existingImages, setExistingImages] = useState([])
   const [deletedImageIds, setDeletedImageIds] = useState([])
   const [product, setProduct] = useState(null)
+  const uploadSyncIdRef = useRef(0)
   const totalImageCount = existingImages.length + imageList.length
   const hasUploadSlots = totalImageCount < 5
 
@@ -98,10 +101,12 @@ export default function ProductFormPage({ mode }) {
 
   useEffect(() => {
     if (!isEdit) {
+      uploadSyncIdRef.current += 1
       setProduct(null)
       setExistingImages([])
       setDeletedImageIds([])
       setImageList([])
+      setImagesPreparing(false)
       return
     }
 
@@ -109,10 +114,12 @@ export default function ProductFormPage({ mode }) {
     productService.getProduct(uuid)
       .then((data) => {
         const nextProduct = data.product
+        uploadSyncIdRef.current += 1
         setProduct(nextProduct)
         setExistingImages(nextProduct.images || [])
         setDeletedImageIds([])
         setImageList([])
+        setImagesPreparing(false)
       })
       .catch((err) => {
         console.error("Failed to load product:", err)
@@ -149,7 +156,7 @@ export default function ProductFormPage({ mode }) {
     if (fields.length > 0) form.setFields(fields)
   }
 
-  const handleUploadChange = ({ fileList }) => {
+  const handleUploadChange = async ({ fileList }) => {
     const availableSlots = Math.max(0, 5 - existingImages.length)
     const nextFileList = fileList.slice(0, availableSlots)
 
@@ -157,8 +164,27 @@ export default function ProductFormPage({ mode }) {
       message.warning("A product can only have up to 5 images")
     }
 
-    setImageList(nextFileList)
-    form.setFieldValue("images", nextFileList)
+    const uploadSyncId = ++uploadSyncIdRef.current
+    setImagesPreparing(true)
+
+    try {
+      const stableFileList = await Promise.all(nextFileList.map(stabilizeUploadFile))
+
+      if (uploadSyncIdRef.current !== uploadSyncId) return
+
+      setImageList(stableFileList)
+      form.setFieldValue("images", stableFileList)
+      form.validateFields(["images"]).catch(() => { })
+    } catch (error) {
+      if (uploadSyncIdRef.current !== uploadSyncId) return
+
+      console.error("Failed to prepare product images:", error)
+      message.error("Failed to prepare the selected image. Please choose it again.")
+    } finally {
+      if (uploadSyncIdRef.current === uploadSyncId) {
+        setImagesPreparing(false)
+      }
+    }
   }
 
   const handleRemoveExistingImage = (imageId) => {
@@ -168,6 +194,11 @@ export default function ProductFormPage({ mode }) {
   }
 
   const handleSubmit = async (values) => {
+    if (imagesPreparing) {
+      message.warning("Please wait for the selected images to finish preparing.")
+      return
+    }
+
     const formData = new FormData()
     const variants = isEdit ? (product?.variants || []) : (values.variants || [])
     const totalVariantStock = getTotalVariantStock(variants)
@@ -700,16 +731,22 @@ export default function ProductFormPage({ mode }) {
                     beforeUpload={() => false}
                     multiple
                     accept="image/*"
-                    disabled={!hasUploadSlots}
+                    disabled={!hasUploadSlots || imagesPreparing}
                   >
-                    <div className={!hasUploadSlots ? "opacity-60" : ""}>
+                    <div className={!hasUploadSlots || imagesPreparing ? "opacity-60" : ""}>
                       <UploadOutlined />
                       <div style={{ marginTop: 8 }}>
-                        {hasUploadSlots ? "Upload" : "Max 5 images"}
+                        {imagesPreparing ? "Preparing..." : hasUploadSlots ? "Upload" : "Max 5 images"}
                       </div>
                     </div>
                   </Upload>
                 </Form.Item>
+
+                {imagesPreparing && (
+                  <div className="-mt-2 rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-700 ring-1 ring-blue-200">
+                    Preparing selected images for upload...
+                  </div>
+                )}
 
                 {isEdit && (
                   <div className="-mt-2 rounded-xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-4 py-3 text-sm">
@@ -722,7 +759,7 @@ export default function ProductFormPage({ mode }) {
                 <Button block size="large" onClick={() => navigate("/seller/products")} className="h-11 rounded-xl">
                   Cancel
                 </Button>
-                <Button type="primary" htmlType="submit" loading={submitLoading} disabled={submitLoading} icon={<Save size={16} />} block size="large" className="h-11 rounded-xl">
+                <Button type="primary" htmlType="submit" loading={submitLoading} disabled={submitLoading || imagesPreparing} icon={<Save size={16} />} block size="large" className="h-11 rounded-xl">
                   {isEdit ? "Update Product" : "Save Product"}
                 </Button>
               </div>
@@ -744,7 +781,7 @@ export default function ProductFormPage({ mode }) {
 
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-3">
                 <div className="text-xs font-semibold text-gray-700">Actions</div>
-                <Button type="primary" htmlType="submit" loading={submitLoading} disabled={submitLoading} icon={<Save size={16} />} block size="large">
+                <Button type="primary" htmlType="submit" loading={submitLoading} disabled={submitLoading || imagesPreparing} icon={<Save size={16} />} block size="large">
                   {isEdit ? "Update Product" : "Save Product"}
                 </Button>
                 <Button block size="large" onClick={() => navigate("/seller/products")}>
