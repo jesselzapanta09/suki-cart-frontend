@@ -6,7 +6,7 @@ import { UploadOutlined } from "@ant-design/icons"
 import { getCategories as getPublicCategories } from "../../../services/authService"
 import * as productService from "../../../services/productService"
 import { getStorageUrl } from "../../../utils/storage"
-import { stabilizeUploadFile } from "../../../utils/upload"
+import { debugFormData, resolveUploadFile } from "../../../utils/upload"
 
 function getStatusTag(status) {
   if (status === "active") return <Tag color="green">Active</Tag>
@@ -85,6 +85,7 @@ export default function ProductFormPage({ mode }) {
   const [deletedImageIds, setDeletedImageIds] = useState([])
   const [product, setProduct] = useState(null)
   const uploadSyncIdRef = useRef(0)
+  const stableUploadFilesRef = useRef(new Map())
   const totalImageCount = existingImages.length + imageList.length
   const hasUploadSlots = totalImageCount < 5
 
@@ -102,6 +103,7 @@ export default function ProductFormPage({ mode }) {
   useEffect(() => {
     if (!isEdit) {
       uploadSyncIdRef.current += 1
+      stableUploadFilesRef.current = new Map()
       setProduct(null)
       setExistingImages([])
       setDeletedImageIds([])
@@ -115,6 +117,7 @@ export default function ProductFormPage({ mode }) {
       .then((data) => {
         const nextProduct = data.product
         uploadSyncIdRef.current += 1
+        stableUploadFilesRef.current = new Map()
         setProduct(nextProduct)
         setExistingImages(nextProduct.images || [])
         setDeletedImageIds([])
@@ -168,12 +171,38 @@ export default function ProductFormPage({ mode }) {
     setImagesPreparing(true)
 
     try {
-      const stableFileList = await Promise.all(nextFileList.map(stabilizeUploadFile))
+      const unresolvedUploads = []
+      const nextStableUploadFiles = new Map()
+      const stableFileList = await Promise.all(nextFileList.map(async (uploadFile, index) => {
+        const stableFile = await resolveUploadFile(uploadFile, stableUploadFilesRef.current.get(uploadFile.uid) ?? null)
+
+        if (stableFile) {
+          nextStableUploadFiles.set(uploadFile.uid, stableFile)
+        } else {
+          unresolvedUploads.push(uploadFile.name || `image-${index + 1}`)
+        }
+
+        return stableFile
+          ? {
+            ...uploadFile,
+            name: uploadFile.name || stableFile.name || `image-${index + 1}`,
+            originFileObj: stableFile,
+          }
+          : uploadFile
+      }))
 
       if (uploadSyncIdRef.current !== uploadSyncId) return
 
-      setImageList(stableFileList)
-      form.setFieldValue("images", stableFileList)
+      if (unresolvedUploads.length > 0) {
+        console.warn("[product-upload] unresolved files", unresolvedUploads, nextFileList)
+        message.error(`Some images could not be prepared: ${unresolvedUploads.join(", ")}`)
+      }
+
+      stableUploadFilesRef.current = nextStableUploadFiles
+      const preparedFileList = stableFileList.filter(Boolean)
+
+      setImageList(preparedFileList)
+      form.setFieldValue("images", preparedFileList)
       form.validateFields(["images"]).catch(() => { })
     } catch (error) {
       if (uploadSyncIdRef.current !== uploadSyncId) return
@@ -251,13 +280,50 @@ export default function ProductFormPage({ mode }) {
       }
     })
 
+    let uploadIndex = 0
+
     imageList.forEach((file) => {
-      if (file.originFileObj) formData.append("images[]", file.originFileObj)
+      const stableFile = stableUploadFilesRef.current.get(file.uid)
+
+      if (stableFile instanceof Blob) {
+        const filename = stableFile instanceof File && stableFile.name
+          ? stableFile.name
+          : file.name || `image-${file.uid || "upload"}`
+
+        formData.append(`images[${uploadIndex}]`, stableFile, filename)
+        uploadIndex += 1
+      }
     })
 
     deletedImageIds.forEach((imageId) => {
       formData.append("deleted_image_ids[]", imageId)
     })
+
+    const preparedUploadCount = uploadIndex
+
+    if (existingImages.length + preparedUploadCount < 1) {
+      form.setFields([
+        {
+          name: ["images"],
+          errors: ["At least one image is required"],
+        },
+      ])
+      message.error("At least one image is required")
+      return
+    }
+
+    console.debug("[product-upload] submit state", {
+      existingImageCount: existingImages.length,
+      deletedImageIds,
+      selectedImageCount: imageList.length,
+      preparedUploadCount,
+      selectedImages: imageList.map((file) => ({
+        uid: file.uid,
+        name: file.name,
+        hasOriginFileObj: Boolean(file.originFileObj),
+      })),
+    })
+    debugFormData(formData, "product-upload")
 
     setSubmitLoading(true)
     try {
