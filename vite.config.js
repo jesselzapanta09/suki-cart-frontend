@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
     ],
     build: {
-      outDir: isCordova ? '../cordova-mobile/www' : 'dist',
+      outDir: isCordova ? '../suki-mobile/www' : 'dist',
       emptyOutDir: true,
     },
     server: {
