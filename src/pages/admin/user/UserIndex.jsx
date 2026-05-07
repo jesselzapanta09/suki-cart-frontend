@@ -155,6 +155,7 @@ export default function UserIndex() {
 
     const roleColors = { admin: "green", seller: "orange", customer: "cyan" }
     const mobileColumnWidth = width => (isMobile ? undefined : width)
+    const actionButtonClass = "!h-9 rounded-lg !px-3 md:!h-8"
 
     const columns = [
         {
@@ -220,12 +221,12 @@ export default function UserIndex() {
                             type="primary"
                             onClick={() => openEdit(record)}
                             icon={<Edit size={14} />}
-                            className="min-h-9 rounded-lg px-3"
+                            className={actionButtonClass}
                         />
                     </Tooltip>
                     <Tooltip title="Delete">
                         <Popconfirm title={`Delete ${record.firstname}?`} description="This action cannot be undone." onConfirm={() => handleDelete(record.id)} okText="Delete" cancelText="Cancel" okButtonProps={{ danger: true }}>
-                            <Button size={isMobile ? "middle" : "small"} danger className="min-h-9 rounded-lg px-3" icon={<Trash2 size={14} />} />
+                            <Button size={isMobile ? "middle" : "small"} danger className={actionButtonClass} icon={<Trash2 size={14} />} />
                         </Popconfirm>
                     </Tooltip>
                 </div>

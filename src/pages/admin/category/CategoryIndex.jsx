@@ -135,6 +135,8 @@ export default function CategoryIndex() {
         }
     }
 
+    const actionButtonClass = "!h-9 rounded-lg !px-3 md:!h-8"
+
     const columns = [
         {
             title: "ID", dataIndex: "id", key: "id", width: 64,
@@ -190,7 +192,7 @@ export default function CategoryIndex() {
                             type="primary"
                             onClick={() => openEdit(record)}
                             icon={<Edit size={14} />}
-                            className="min-h-9 rounded-lg px-3"
+                            className={actionButtonClass}
                         />
                     </Tooltip>
                     <Tooltip title="Delete">
@@ -198,7 +200,7 @@ export default function CategoryIndex() {
                             <Button
                                 size={isMobile ? "middle" : "small"}
                                 danger
-                                className="min-h-9 rounded-lg px-3"
+                                className={actionButtonClass}
                                 icon={<Trash2 size={14} />}
                             />
                         </Popconfirm>

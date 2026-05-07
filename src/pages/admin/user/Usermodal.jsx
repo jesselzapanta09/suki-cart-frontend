@@ -37,7 +37,9 @@ export default function UserModal({ open, onClose, onSubmit, initialValues, load
     const [bannerPreparing, setBannerPreparing] = useState(false)
 
     const labelClass = "text-sm font-medium text-gray-700"
-    const inputClass = "w-full rounded-xl border border-gray-300"
+    const singleLineInputClass = "w-full !h-12 rounded-xl"
+    const passwordInputClass = "w-full !h-12 rounded-xl"
+    const textareaClass = "w-full rounded-xl"
 
     const currentFirstname = Form.useWatch("firstname", form)
     const selectedRole = Form.useWatch("role", form)
@@ -298,7 +300,7 @@ export default function UserModal({ open, onClose, onSubmit, initialValues, load
                     form={form}
                     requiredMark={false}
                     size="large"
-                    className="[&_.ant-form-item]:mb-4 [&_.ant-form-item-label>label]:text-sm [&_.ant-input]:min-h-12 [&_.ant-input-affix-wrapper]:min-h-12 [&_.ant-input-password]:min-h-12 [&_.ant-select-selector]:min-h-12 [&_.ant-select-selector]:items-center [&_.ant-upload-list-item-container]:w-full! [&_.ant-upload-wrapper]:w-full"
+                    className="[&_.ant-form-item]:mb-4 [&_.ant-form-item-label>label]:text-sm [&_.ant-input-affix-wrapper]:min-h-12! [&_.ant-select-selector]:h-12! [&_.ant-select-selector]:min-h-12! [&_.ant-select-selector]:rounded-xl! [&_.ant-select-selector]:items-center [&_.ant-upload-list-item-container]:w-full! [&_.ant-upload-wrapper]:w-full"
                 >
                     <div style={{ display: step === aboutStep ? undefined : "none" }}>
                         <Form.Item label={<span className={labelClass}>Profile Photo <span className="font-normal text-gray-400">(optional)</span></span>}>
@@ -334,7 +336,7 @@ export default function UserModal({ open, onClose, onSubmit, initialValues, load
                         <Form.Item name="role" label={<span className={labelClass}>Role</span>} rules={[{ required: true, message: "Role is required" }]}>
                             <Select
                                 placeholder="Select role"
-                                className="rounded-xl"
+                                className="w-full"
                                 options={[
                                     { label: "Admin", value: "admin" },
                                     { label: "Seller", value: "seller" },
@@ -344,15 +346,15 @@ export default function UserModal({ open, onClose, onSubmit, initialValues, load
                         </Form.Item>
 
                         <Form.Item name="firstname" label={<span className={labelClass}>First Name</span>} rules={[{ required: true, message: "First name is required" }]}>
-                            <Input placeholder="e.g. Juan" className={inputClass} />
+                            <Input placeholder="e.g. Juan" className={singleLineInputClass} />
                         </Form.Item>
 
                         <Form.Item name="lastname" label={<span className={labelClass}>Last Name</span>} rules={[{ required: true, message: "Last name is required" }]}>
-                            <Input placeholder="e.g. Dela Cruz" className={inputClass} />
+                            <Input placeholder="e.g. Dela Cruz" className={singleLineInputClass} />
                         </Form.Item>
 
                         <Form.Item name="contact_number" label={<span className={labelClass}>Contact Number <span className="font-normal text-gray-400">(optional)</span></span>}>
-                            <Input placeholder="e.g. 09171234567" className={inputClass} />
+                            <Input placeholder="e.g. 09171234567" className={singleLineInputClass} />
                         </Form.Item>
 
                         {actionButtons(onClose, handleNext, "Continue", <ArrowRightOutlined />)}
@@ -360,7 +362,7 @@ export default function UserModal({ open, onClose, onSubmit, initialValues, load
 
                     <div style={{ display: step === storeStep ? undefined : "none" }}>
                         <Form.Item name="store_name" label={<span className={labelClass}>Store Name</span>} rules={[{ required: isSeller, message: "Store name is required" }]}>
-                            <Input placeholder="e.g., Maria's Sari-Sari Store" className={inputClass} />
+                            <Input placeholder="e.g., Maria's Sari-Sari Store" className={singleLineInputClass} />
                         </Form.Item>
 
                         <Form.Item name="store_category" label={<span className={labelClass}>Store Category</span>} rules={[{ required: isSeller, message: "Please select a category" }]}>
@@ -368,7 +370,7 @@ export default function UserModal({ open, onClose, onSubmit, initialValues, load
                         </Form.Item>
 
                         <Form.Item name="store_description" label={<span className={labelClass}>Store Description</span>} rules={[{ required: isSeller, message: "Description is required" }, { max: 500, message: "Max 500 characters" }]}>
-                            <Input.TextArea placeholder="Tell customers about this store..." rows={isMobile ? 5 : 4} className={inputClass} />
+                            <Input.TextArea placeholder="Tell customers about this store..." rows={isMobile ? 5 : 4} className={textareaClass} />
                         </Form.Item>
 
                         <Form.Item name="store_banner" label={<span className={labelClass}>Store Banner <span className="font-normal text-gray-400">(optional)</span></span>} valuePropName="fileList" getValueFromEvent={e => Array.isArray(e) ? e : e?.fileList}>
@@ -392,7 +394,7 @@ export default function UserModal({ open, onClose, onSubmit, initialValues, load
 
                     <div style={{ display: step === credentialStep ? undefined : "none" }}>
                         <Form.Item name="email" label={<span className={labelClass}>Email address</span>} rules={[{ required: true, message: "Email is required" }, { type: "email", message: "Enter a valid email" }]}>
-                            <Input placeholder="user@example.com" className={inputClass} />
+                            <Input placeholder="user@example.com" className={singleLineInputClass} />
                         </Form.Item>
 
                         <Form.Item
@@ -400,7 +402,7 @@ export default function UserModal({ open, onClose, onSubmit, initialValues, load
                             label={<span className={labelClass}>Password{mode === "edit" && <span className="font-normal text-gray-400"> (blank = keep current)</span>}</span>}
                             rules={mode === "add" ? [{ required: true, message: "Password is required" }, { min: 6, message: "At least 6 characters" }] : [{ min: 6, message: "At least 6 characters if changing" }]}
                         >
-                            <Input.Password placeholder="........" className={inputClass} />
+                            <Input.Password className={passwordInputClass} classNames={{ input: "!h-full" }} />
                         </Form.Item>
 
                         {actionButtons(
