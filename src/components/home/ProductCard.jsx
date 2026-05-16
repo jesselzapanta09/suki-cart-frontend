@@ -2,6 +2,7 @@ import { App } from "antd";
 import { ShoppingCart, Package } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/auth-context";
+import { formatPeso } from "../../utils/currency";
 import { getStorageUrl } from "../../utils/storage";
 
 export default function ProductCard({ product, onAdd }) {
@@ -130,7 +131,7 @@ export default function ProductCard({ product, onAdd }) {
                     <div className="min-w-0">
                         {hasPrice ? (
                             <>
-                                <span className="text-base font-bold text-green-700">{`₱${priceValue.toFixed(2)}`}</span>
+                                <span className="text-base font-bold text-green-700">{formatPeso(priceValue)}</span>
                                 <p className="mt-0.5 truncate text-xs text-gray-400">
                                     {`${soldCount} sold • ${stockCount} in stock`}
                                 </p>

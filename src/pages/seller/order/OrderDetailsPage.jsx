@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react"
-import { App, Button, Empty, Form, Input, Modal, Select, Spin, Tag } from "antd"
+import { App, Button, Empty, Form, Input, Modal, Spin, Tag } from "antd"
 import { ArrowLeft, CheckCircle, Clock, Package, Truck, User, X, MapPin, ShoppingBag } from "lucide-react"
 import { useNavigate, useParams } from "react-router-dom"
 import {
     cancelSellerOrderItem,
     getSellerOrder,
     updateSellerOrderStatus,
+    updateSellerOrderShipment,
 } from "../../../services/sellerService"
 import LocationAddress from "../../../components/LocationAddress"
+import { formatPeso } from "../../../utils/currency"
 import { getStorageUrl } from "../../../utils/storage"
 
 const statusConfig = {
@@ -21,15 +23,24 @@ const statusConfig = {
 const statusSteps = ["pending", "processing", "shipped", "delivered"]
 
 const statusOptions = [
-    { value: "pending", label: "Order placed" },
-    { value: "processing", label: "Preparing to ship" },
-    { value: "shipped", label: "Shipped out" },
-    { value: "cancelled", label: "Cancel store order" },
+    {
+        value: "processing",
+        label: "Preparing to ship",
+        description: "Confirm that this item is packed and being readied for handoff.",
+    },
+    {
+        value: "shipped",
+        label: "Shipped out",
+        description: "Add courier and tracking details before the customer follows the parcel.",
+    },
 ]
+const nextStatusMap = {
+    pending: "processing",
+    processing: "shipped",
+}
 
-const formatMoney = (value) => `₱${Number(value || 0).toFixed(2)}`
 const customerName = (customer) => `${customer?.firstname || ""} ${customer?.lastname || ""}`.trim() || customer?.email || "Customer"
-const canCancelItem = (item) => !["cancelled", "shipped", "delivered"].includes(item?.status)
+const canCancelItem = (item) => item?.status === "pending"
 const getCancelledByLabel = (cancelledBy) => ({
     customer: "Customer",
     seller: "Seller",
@@ -54,41 +65,72 @@ export default function OrderDetailsPage() {
         const items = storeOrder.items || []
         return items[0] || null
     }, [storeOrder.items])
+    const currentStatus = selectedItem?.status || storeOrder.status || "pending"
+    const suggestedStatus = nextStatusMap[currentStatus] || (currentStatus === "shipped" ? "shipped" : currentStatus)
+    const availableStatusOptions = useMemo(() => {
+        const nextStatus = nextStatusMap[currentStatus]
+
+        if (!nextStatus) {
+            return []
+        }
+
+        return statusOptions.filter((option) => option.value === nextStatus)
+    }, [currentStatus])
     const selectedStatus = Form.useWatch("status", form)
 
     const fetchOrder = useCallback(async () => {
         setLoading(true)
         try {
             const data = await getSellerOrder(checkoutNo)
-            const nextOrder = data?.data
-            setOrder(nextOrder)
-            const nextItem = nextOrder?.store_order?.items?.[0]
-            form.setFieldsValue({
-                status: nextItem?.status || "pending",
-                courier_name: nextItem?.courier_name || "",
-                tracking_number: nextItem?.tracking_number || "",
-                cancellation_reason: "",
-            })
+            setOrder(data?.data)
         } catch (err) {
             message.error(err.message || "Failed to fetch order")
         } finally {
             setLoading(false)
         }
-    }, [checkoutNo, form, message])
+    }, [checkoutNo, message])
 
     useEffect(() => {
         fetchOrder()
     }, [fetchOrder])
 
+    useEffect(() => {
+        if (!selectedItem) {
+            return
+        }
+
+        form.setFieldsValue({
+            status: suggestedStatus,
+            courier_name: selectedItem?.courier_name || "",
+            tracking_number: selectedItem?.tracking_number || "",
+        })
+    }, [form, selectedItem, suggestedStatus])
+
     const handleStatusSave = async () => {
         try {
-            const values = await form.validateFields()
+            const fieldsToValidate = selectedStatus === "shipped"
+                ? ["status", "courier_name", "tracking_number"]
+                : ["status"]
+            const values = await form.validateFields(fieldsToValidate)
+
             setSavingStatus(true)
-            const data = await updateSellerOrderStatus(selectedItem?.id, {
-                ...values,
-            })
+            const data = currentStatus === "shipped"
+                ? await updateSellerOrderShipment(selectedItem?.id, {
+                    courier_name: values.courier_name,
+                    tracking_number: values.tracking_number,
+                })
+                : await updateSellerOrderStatus(selectedItem?.id, {
+                    status: values.status,
+                    ...(values.status === "shipped"
+                        ? {
+                            courier_name: values.courier_name,
+                            tracking_number: values.tracking_number,
+                        }
+                        : {}),
+                })
+
             setOrder(data?.data)
-            message.success("Order status updated")
+            message.success(currentStatus === "shipped" ? "Shipment details updated" : "Order status updated")
         } catch (err) {
             if (!err?.errorFields) {
                 message.error(err.message || "Failed to update order status")
@@ -148,8 +190,7 @@ export default function OrderDetailsPage() {
         )
     }
 
-    const statusInfo = statusConfig[selectedItem?.status || storeOrder.status] || statusConfig.pending
-    const currentStatus = selectedItem?.status || storeOrder.status
+    const statusInfo = statusConfig[currentStatus] || statusConfig.pending
     const currentStep = currentStatus === "cancelled" ? 0 : Math.max(statusSteps.indexOf(currentStatus), 0)
     const timelineItems = statusSteps.map((status, index) => {
         const isCompleted = index < currentStep
@@ -168,6 +209,13 @@ export default function OrderDetailsPage() {
         }
     })
     const StatusIcon = statusInfo.icon
+    const activeStatus = selectedStatus || suggestedStatus
+    const activeStatusInfo = statusConfig[activeStatus] || statusInfo
+    const showShipmentFields = activeStatus === "shipped"
+    const isShipmentEditing = currentStatus === "shipped"
+    const actionButtonLabel = isShipmentEditing
+        ? "Save Shipment Details"
+        : `Mark as ${activeStatusInfo.label}`
 
     return (
         <div className="mx-auto max-w-7xl space-y-4 px-3 pb-6 pt-3 sm:space-y-5 sm:px-4 sm:pb-8 sm:pt-4 lg:px-8">
@@ -295,7 +343,7 @@ export default function OrderDetailsPage() {
                                     <h2 className="text-sm sm:text-base font-bold text-gray-950">Ordered Item/s</h2>
                                     <p className="text-xs text-gray-500">{storeOrder.active_items_count || 0} active · {storeOrder.cancelled_items_count || 0} cancelled</p>
                                 </div>
-                                <p className="text-lg sm:text-xl font-bold text-green-700 shrink-0">{formatMoney(storeOrder.subtotal)}</p>
+                                <p className="text-lg sm:text-xl font-bold text-green-700 shrink-0">{formatPeso(storeOrder.subtotal)}</p>
                             </div>
 
                             <div className="divide-y divide-gray-100 overflow-x-auto">
@@ -406,37 +454,69 @@ export default function OrderDetailsPage() {
                                     </div>
 
                                     <Form form={form} size="large" layout="vertical" requiredMark={false} className="ant-form-mobile">
-                                        <Form.Item name="status" label="Status" rules={[{ required: true, message: "Status is required" }]}>
-                                            <Select options={statusOptions} className="h-10 sm:h-11" />
+                                        <Form.Item name="status" hidden rules={[{ required: true, message: "Status is required" }]}>
+                                            <Input />
                                         </Form.Item>
 
-                                        {selectedStatus === "shipped" && (
-                                            <>
-                                                <Form.Item name="courier_name" label="Courier Name" rules={[{ required: true, message: "Courier name is required" }]}>
-                                                    <Input placeholder="e.g. LBC, J&T, Flash Express" className="h-10 sm:h-11 text-base" />
-                                                </Form.Item>
-                                                <Form.Item name="tracking_number" label="Tracking Number" rules={[{ required: true, message: "Tracking number is required" }]}>
-                                                    <Input placeholder="Tracking number" className="h-10 sm:h-11 text-base" />
-                                                </Form.Item>
-                                            </>
-                                        )}
+                                        <div className="space-y-3">
+                                            <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5">
+                                                <span className="text-xs font-medium text-gray-500">Current status</span>
+                                                <Tag color={statusInfo.color} className="m-0 w-fit text-xs">
+                                                    {statusInfo.label}
+                                                </Tag>
+                                            </div>
 
-                                        {selectedStatus === "cancelled" && (
-                                            <Form.Item name="cancellation_reason" label="Cancellation Reason" rules={[{ required: true, message: "Cancellation reason is required" }]}>
-                                                <Input.TextArea rows={3} maxLength={1000} placeholder="Why is this store order being cancelled?" className="text-base" />
-                                            </Form.Item>
-                                        )}
+                                            {availableStatusOptions.map((option) => {
+                                                const isSelected = activeStatus === option.value
+                                                const OptionIcon = statusConfig[option.value]?.icon || Package
 
-                                        <Button
-                                            type="primary"
-                                            block
-                                            loading={savingStatus}
-                                            disabled={!selectedItem}
-                                            onClick={handleStatusSave}
-                                            className="h-10 sm:h-11 text-base font-semibold active:scale-95 transition-transform"
-                                        >
-                                            Save Status
-                                        </Button>
+                                                return (
+                                                    <button
+                                                        key={option.value}
+                                                        type="button"
+                                                        onClick={() => form.setFieldsValue({ status: option.value })}
+                                                        className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all active:scale-[0.99] ${isSelected
+                                                            ? "border-emerald-400 bg-emerald-50"
+                                                            : "border-gray-200 bg-white hover:border-emerald-300"
+                                                            }`}
+                                                    >
+                                                        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isSelected ? "bg-emerald-600 text-white" : "bg-emerald-100 text-emerald-700"}`}>
+                                                            <OptionIcon size={18} />
+                                                        </div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="text-xs text-gray-500">Next step</p>
+                                                            <p className="text-sm font-semibold text-gray-900">{option.label}</p>
+                                                        </div>
+                                                    </button>
+                                                )
+                                            })}
+
+                                            {showShipmentFields && (
+                                                <div className="rounded-xl border border-sky-100 bg-sky-50/60 p-3">
+                                                    <p className="mb-3 text-sm font-semibold text-gray-900">Shipping details</p>
+
+                                                    <div className="grid gap-3">
+                                                        <Form.Item name="courier_name" label="Courier Name" rules={[{ required: true, message: "Courier name is required" }]}>
+                                                            <Input placeholder="e.g. LBC, J&T, Flash Express" className="h-10 sm:h-11 text-base" />
+                                                        </Form.Item>
+                                                        <Form.Item name="tracking_number" label="Tracking Number" rules={[{ required: true, message: "Tracking number is required" }]}>
+                                                            <Input placeholder="Tracking number" className="h-10 sm:h-11 text-base" />
+                                                        </Form.Item>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            <Button
+                                                type="primary"
+                                                block
+                                                loading={savingStatus}
+                                                disabled={!selectedItem || !activeStatus}
+                                                onClick={handleStatusSave}
+                                                className="h-10 sm:h-11 text-base font-semibold active:scale-95 transition-transform"
+                                            >
+                                                {actionButtonLabel}
+                                            </Button>
+                                        </div>
                                     </Form>
                                 </div>
                             )}

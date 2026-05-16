@@ -3,6 +3,7 @@ import { Alert, App, Button, Card, Skeleton, Tag } from "antd";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/auth-context";
 import { getCustomerDashboard } from "../../services/customerDashboardService";
+import { formatPeso } from "../../utils/currency";
 import { getStorageUrl } from "../../utils/storage";
 import {
     ArrowRight,
@@ -12,8 +13,6 @@ import {
     ShoppingCart,
     Truck,
 } from "lucide-react";
-
-const formatMoney = (value) => `P${Number(value || 0).toFixed(2)}`;
 
 const greeting = () => {
     const hour = new Date().getHours();
@@ -166,7 +165,7 @@ export default function CustomerDashboard() {
                             <StatCard icon={<ShoppingCart size={20} />} label="Cart Items" value={stats.cart_items} helper={`${stats.cart_lines ?? 0} product lines`} tone="green" />
                             <StatCard icon={<ShoppingBag size={20} />} label="Orders" value={stats.total_orders} helper={`${stats.pending_orders ?? 0} still pending`} tone="blue" />
                             <StatCard icon={<Truck size={20} />} label="Delivered" value={stats.delivered_orders} helper={`${stats.shipped_orders ?? 0} currently shipped`} tone="amber" />
-                            <StatCard icon={<BadgeCheck size={20} />} label="Spend" value={formatMoney(stats.spend_total)} helper={`${stats.reviews_given ?? 0} reviews submitted`} tone="emerald" />
+                            <StatCard icon={<BadgeCheck size={20} />} label="Spend" value={formatPeso(stats.spend_total)} helper={`${stats.reviews_given ?? 0} reviews submitted`} tone="emerald" />
                         </>
                     )}
                 </div>
@@ -222,7 +221,7 @@ export default function CustomerDashboard() {
                                                     <p className="mt-1 text-xs text-gray-400">{formatDateTime(order.created_at)}</p>
                                                 </div>
                                                 <div className="text-left sm:text-right">
-                                                    <p className="text-sm font-semibold text-green-700">{formatMoney(order.item_total)}</p>
+                                                    <p className="text-sm font-semibold text-green-700">{formatPeso(order.item_total)}</p>
                                                     <p className="text-xs text-gray-400">Qty {order.quantity}</p>
                                                 </div>
                                             </div>
@@ -243,7 +242,7 @@ export default function CustomerDashboard() {
                                                     <p className="truncate text-sm font-semibold text-gray-900">{order.product?.name || "Product"}</p>
                                                     {order.variant?.name ? <p className="mt-1 text-xs text-gray-500">Variant: {order.variant.name}</p> : null}
                                                     <p className="mt-1 text-xs text-gray-500">
-                                                        Price {formatMoney(order.price)} | Shipping {formatMoney(order.shipping_cost)}
+                                                        Price {formatPeso(order.price)} | Shipping {formatPeso(order.shipping_cost)}
                                                     </p>
                                                 </div>
                                                 <div className="shrink-0">
@@ -297,7 +296,7 @@ export default function CustomerDashboard() {
                                                 <p className="mt-1 text-xs text-gray-500">{item.product?.store?.store_name || "Unknown store"}</p>
                                                 {item.variant?.name ? <p className="mt-1 text-xs text-gray-500">Variant: {item.variant.name}</p> : null}
                                                 <p className="mt-2 text-xs text-gray-400">
-                                                    Qty {item.quantity} | {formatMoney(item.line_total)}
+                                                    Qty {item.quantity} | {formatPeso(item.line_total)}
                                                 </p>
                                             </div>
                                         </div>

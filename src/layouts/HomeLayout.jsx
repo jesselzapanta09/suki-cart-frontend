@@ -7,6 +7,7 @@ import { ShoppingBag, ShoppingCart, Package, LogIn, Rocket, LayoutDashboard } fr
 import { searchPublicProducts } from "../services/productService";
 import SearchBar from "../components/SearchBar";
 import { sukiCartLogoHome } from "../utils/logos";
+import { formatPeso } from "../utils/currency";
 import { getStorageUrl } from "../utils/storage";
 
 export default function HomeLayout() {
@@ -181,7 +182,7 @@ export default function HomeLayout() {
                                                             <div className="text-xs text-gray-500">{p.category?.name || "Unknown"}</div>
                                                         </div>
                                                         <div className="flex shrink-0 flex-col items-end">
-                                                            <span className="text-sm font-semibold text-green-600">₱{price.toFixed(2)}</span>
+                                                            <span className="text-sm font-semibold text-green-600">{formatPeso(price)}</span>
                                                             <span className="text-xs text-gray-400"> {(p.variants?.reduce((sum, v) => sum + (v.stock || 0), 0) || 0)} in stock</span>
                                                         </div>
                                                     </div>
@@ -296,7 +297,7 @@ export default function HomeLayout() {
                                                             <div className="text-xs text-gray-500">{p.category?.name || "Unknown"}</div>
                                                         </div>
                                                         <div className="flex shrink-0 flex-col items-end">
-                                                            <span className="text-sm font-semibold text-green-600">₱{price.toFixed(2)}</span>
+                                                            <span className="text-sm font-semibold text-green-600">{formatPeso(price)}</span>
                                                             <span className="text-xs text-gray-400"> {(p.variants?.reduce((sum, v) => sum + (v.stock || 0), 0) || 0)} in stock</span>
                                                         </div>
                                                     </div>

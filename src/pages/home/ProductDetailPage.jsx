@@ -7,6 +7,7 @@ import { useCart } from "../../context/CartContext";
 import { useAuth } from "../../context/auth-context";
 import SimilarProducts from "../../components/home/SimilarProducts";
 import ProductReviewsSection from "../../components/home/ProductReviewsSection";
+import { formatPeso } from "../../utils/currency";
 import { getStorageUrl } from "../../utils/storage";
 
 export default function ProductDetailPage() {
@@ -372,7 +373,7 @@ export default function ProductDetailPage() {
                             <div className="mb-6">
                                 <div className="flex items-baseline gap-4">
                                     <span className="text-4xl font-bold text-green-700">
-                                        PHP {(typeof selectedVariant?.price === "number" ? selectedVariant.price : Number(selectedVariant?.price || 0)).toFixed(2)}
+                                        {formatPeso(selectedVariant?.price)}
                                     </span>
                                 </div>
                                 <div className="mt-2">
@@ -403,7 +404,7 @@ export default function ProductDetailPage() {
                                                     <div>
                                                         <p className="font-semibold text-gray-800">{variant.name}</p>
                                                         <p className="text-sm text-gray-600">
-                                                            PHP {(typeof variant.price === "number" ? variant.price : Number(variant.price || 0)).toFixed(2)} • {variant.stock > 0 ? `${variant.stock} in stock` : "Out of stock"}
+                                                            {formatPeso(variant.price)} • {variant.stock > 0 ? `${variant.stock} in stock` : "Out of stock"}
                                                         </p>
                                                     </div>
                                                     {selectedVariant?.id === variant.id && (

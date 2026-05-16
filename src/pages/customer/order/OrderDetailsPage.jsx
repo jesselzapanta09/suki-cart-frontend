@@ -5,6 +5,7 @@ import { useNavigate, useParams } from "react-router-dom"
 import * as orderService from "../../../services/orderService"
 import LocationAddress from "../../../components/LocationAddress"
 import ReviewProductModal from "./ReviewProductModal"
+import { formatPeso } from "../../../utils/currency"
 import { getStorageUrl } from "../../../utils/storage"
 
 const statusConfig = {
@@ -17,8 +18,7 @@ const statusConfig = {
 
 const statusSteps = ["pending", "processing", "shipped", "delivered"]
 
-const formatMoney = (value) => `\u20b1${Number(value || 0).toFixed(2)}`
-const canCancelItem = (item) => ["pending", "processing"].includes(item?.status)
+const canCancelItem = (item) => item?.status === "pending"
 const getCancelledByLabel = (cancelledBy) => ({
     customer: "Customer",
     seller: "Seller",
@@ -282,7 +282,7 @@ export default function OrderDetailsPage() {
                                         <h2 className="text-sm font-bold text-gray-950 sm:text-base">Ordered Item&apos;s</h2>
                                         <p className="text-xs text-gray-500">{order.active_items_count || 0} active | {order.cancelled_items_count || 0} cancelled</p>
                                     </div>
-                                    <p className="shrink-0 text-lg font-bold text-green-700 sm:text-xl">{formatMoney(group.subtotal)}</p>
+                                    <p className="shrink-0 text-lg font-bold text-green-700 sm:text-xl">{formatPeso(group.subtotal)}</p>
                                 </div>
 
                                 {(group.shipment?.courier_name || group.items?.[0]?.courier_name) && (
@@ -443,19 +443,19 @@ export default function OrderDetailsPage() {
                             <div className="mb-6 space-y-3">
                                 <div className="flex justify-between text-sm">
                                     <span className="text-gray-600">Item Total</span>
-                                    <span className="font-medium text-gray-800">{formatMoney(itemTotal)}</span>
+                                    <span className="font-medium text-gray-800">{formatPeso(itemTotal)}</span>
                                 </div>
                                 <div className="flex justify-between text-sm">
                                     <span className="text-gray-600">Subtotal</span>
-                                    <span className="font-medium text-gray-800">{formatMoney(order.price)}</span>
+                                    <span className="font-medium text-gray-800">{formatPeso(order.price)}</span>
                                 </div>
                                 <div className="flex justify-between text-sm">
                                     <span className="text-gray-600">Shipping</span>
-                                    <span className="font-medium text-gray-800">{formatMoney(order.shipping_cost)}</span>
+                                    <span className="font-medium text-gray-800">{formatPeso(order.shipping_cost)}</span>
                                 </div>
                                 <div className="flex justify-between border-t border-gray-200 pt-3">
                                     <span className="font-bold text-gray-900">Total</span>
-                                    <span className="text-2xl font-bold text-green-600">{formatMoney(order.total_price)}</span>
+                                    <span className="text-2xl font-bold text-green-600">{formatPeso(order.total_price)}</span>
                                 </div>
                             </div>
 

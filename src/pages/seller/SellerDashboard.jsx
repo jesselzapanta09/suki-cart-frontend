@@ -3,6 +3,7 @@ import { Alert, App, Button, Card, Skeleton, Tag } from "antd";
 import { Link, useOutletContext } from "react-router-dom";
 import { useAuth } from "../../context/auth-context";
 import { getSellerDashboard, resubmitStore } from "../../services/sellerService";
+import { formatPeso } from "../../utils/currency";
 import { getStorageUrl } from "../../utils/storage";
 import {
     ArrowRight,
@@ -14,8 +15,6 @@ import {
     Store,
     XCircle,
 } from "lucide-react";
-
-const formatMoney = (value) => `P${Number(value || 0).toFixed(2)}`;
 
 const greeting = () => {
     const hour = new Date().getHours();
@@ -266,7 +265,7 @@ export default function SellerDashboard() {
                         <StatCard icon={<Boxes size={20} />} label="Products" value={stats.total_products} helper={`${stats.active_products ?? 0} active listings`} tone="green" />
                         <StatCard icon={<BadgeCheck size={20} />} label="Orders" value={stats.total_orders} helper={`${stats.pending_orders ?? 0} waiting to process`} tone="blue" />
                         <StatCard icon={<Package size={20} />} label="Stock Units" value={stats.total_stock} helper={`${stats.out_of_stock_products ?? 0} out of stock`} tone="amber" />
-                        <StatCard icon={<Store size={20} />} label="Revenue" value={formatMoney(stats.lifetime_revenue)} helper={`${stats.delivered_orders ?? 0} delivered items`} tone="emerald" />
+                        <StatCard icon={<Store size={20} />} label="Revenue" value={formatPeso(stats.lifetime_revenue)} helper={`${stats.delivered_orders ?? 0} delivered items`} tone="emerald" />
                     </>
                 )}
             </div>
@@ -317,7 +316,7 @@ export default function SellerDashboard() {
                                                 <p className="mt-1 text-xs text-gray-400">{formatDateTime(order.created_at)}</p>
                                             </div>
                                             <div className="text-left sm:text-right">
-                                                <p className="text-sm font-semibold text-green-700">{formatMoney(order.item_total)}</p>
+                                                <p className="text-sm font-semibold text-green-700">{formatPeso(order.item_total)}</p>
                                                 <p className="text-xs text-gray-400">Qty {order.quantity}</p>
                                             </div>
                                         </div>
@@ -338,7 +337,7 @@ export default function SellerDashboard() {
                                                 <p className="truncate text-sm font-semibold text-gray-900">{order.product?.name || "Product"}</p>
                                                 {order.variant?.name ? <p className="mt-1 text-xs text-gray-500">Variant: {order.variant.name}</p> : null}
                                                 <p className="mt-1 text-xs text-gray-500">
-                                                    Price {formatMoney(order.price)} | Shipping {formatMoney(order.shipping_cost)}
+                                                    Price {formatPeso(order.price)} | Shipping {formatPeso(order.shipping_cost)}
                                                 </p>
                                             </div>
                                         </div>
@@ -395,7 +394,7 @@ export default function SellerDashboard() {
                                                 </div>
                                                 <p className="mt-1 text-xs text-gray-500">{product.category?.name || "No category"}</p>
                                                 <p className="mt-2 text-xs text-gray-400">
-                                                    {firstVariant?.price ? formatMoney(firstVariant.price) : "No price yet"} | Stock {totalStock}
+                                                    {firstVariant?.price ? formatPeso(firstVariant.price) : "No price yet"} | Stock {totalStock}
                                                 </p>
                                                 <p className="mt-1 text-xs text-gray-400">Created {formatDate(product.created_at)}</p>
                                             </div>

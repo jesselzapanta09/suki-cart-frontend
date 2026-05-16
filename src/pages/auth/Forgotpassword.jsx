@@ -11,12 +11,16 @@ export default function ForgotPassword() {
     const [form] = Form.useForm()
 
     const onFinish = async ({ email }) => {
+        form.setFields([{ name: "email", errors: [] }])
         setLoading(true)
         try {
             const data = await forgotPassword(email)
             setSent(true)
             message.success(data.message)
         } catch (err) {
+            if (err.status === 404) {
+                form.setFields([{ name: "email", errors: ["Email not found."] }])
+            }
             message.error(err.message ?? "Something went wrong. Please try again.")
         } finally {
             setLoading(false)
@@ -48,7 +52,7 @@ export default function ForgotPassword() {
                 ) : (
                     <div className="text-center">
                         <h3 className="font-display font-bold text-xl text-green-900 mb-2">Check your inbox!</h3>
-                        <p className="text-gray-500 mb-4 leading-relaxed">If an account with that email exists, you'll receive a reset link shortly.</p>
+                        <p className="text-gray-500 mb-4 leading-relaxed">We've sent a password reset link to your email.</p>
                         <button onClick={() => setSent(false)} className="text-green-600 font-medium text-sm hover:underline">Try a different email</button>
                     </div>
                 )}

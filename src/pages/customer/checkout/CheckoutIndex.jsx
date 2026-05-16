@@ -6,6 +6,7 @@ import { useCart } from "../../../context/CartContext";
 import { useAuth } from "../../../context/auth-context";
 import * as orderService from "../../../services/orderService";
 import addressService from "../../../services/addressService";
+import { formatPeso } from "../../../utils/currency";
 import { getStorageUrl } from "../../../utils/storage";
 
 export default function CheckoutIndex() {
@@ -337,7 +338,7 @@ export default function CheckoutIndex() {
                                                     </div>
                                                     <div>
                                                         <p className="text-gray-500 text-xs uppercase tracking-wide">Unit Price</p>
-                                                        <p className="font-medium text-gray-700">₱{getPrice(item).toFixed(2)}</p>
+                                                        <p className="font-medium text-gray-700">{formatPeso(getPrice(item))}</p>
                                                     </div>
 
                                                     <div className="md:col-span-2">
@@ -411,15 +412,15 @@ export default function CheckoutIndex() {
                                                 <div className="space-y-1 text-sm">
                                                     <div className="flex justify-between text-gray-700">
                                                         <span>Base Fee:</span>
-                                                        <span>₱{item.base_fee.toFixed(2)}</span>
+                                                        <span>{formatPeso(item.base_fee)}</span>
                                                     </div>
                                                     <div className="flex justify-between text-gray-700">
-                                                        <span>Weight Fee ({item.total_weight}kg × ₱50):</span>
-                                                        <span>₱{item.weight_fee.toFixed(2)}</span>
+                                                        <span>Weight Fee ({item.total_weight}kg × {formatPeso(50)}):</span>
+                                                        <span>{formatPeso(item.weight_fee)}</span>
                                                     </div>
                                                     <div className="flex justify-between font-semibold text-orange-600 border-t border-orange-200 pt-2 mt-2">
                                                         <span>Subtotal:</span>
-                                                        <span>₱{item.shipping_fee.toFixed(2)}</span>
+                                                        <span>{formatPeso(item.shipping_fee)}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -470,7 +471,7 @@ export default function CheckoutIndex() {
                         <div className="bg-green-50 rounded-lg p-6 border border-green-200 space-y-3">
                             <div className="flex justify-between items-center">
                                 <span className="text-sm text-gray-700 font-medium">Subtotal (Products):</span>
-                                <span className="text-lg font-semibold text-gray-900">₱{checkedTotal.toFixed(2)}</span>
+                                <span className="text-lg font-semibold text-gray-900">{formatPeso(checkedTotal)}</span>
                             </div>
                             {shippingLoading ? (
                                 <div className="flex justify-between items-center">
@@ -480,12 +481,12 @@ export default function CheckoutIndex() {
                             ) : (
                                 <div className="flex justify-between items-center">
                                     <span className="text-sm text-gray-700 font-medium">Shipping:</span>
-                                    <span className="text-lg font-semibold text-orange-600">₱{shippingCost.toFixed(2)}</span>
+                                    <span className="text-lg font-semibold text-orange-600">{formatPeso(shippingCost)}</span>
                                 </div>
                             )}
                             <div className="border-t border-green-200 pt-3 flex justify-between items-center">
                                 <span className="text-gray-700 font-bold">Total Amount:</span>
-                                <span className="text-3xl font-bold text-green-600">₱{finalTotal.toFixed(2)}</span>
+                                <span className="text-3xl font-bold text-green-600">{formatPeso(finalTotal)}</span>
                             </div>
                         </div>
 

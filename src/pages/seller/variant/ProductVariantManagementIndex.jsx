@@ -4,6 +4,7 @@ import { useParams, useNavigate } from "react-router-dom"
 import { Plus, Trash2, ArrowLeft, Layers, Edit, Search } from "lucide-react"
 import ProductVariantModal from "./ProductVariantModal"
 import * as productService from "../../../services/productService"
+import { formatPeso } from "../../../utils/currency"
 
 export default function ProductVariantManagementIndex() {
   const { uuid: productUuid } = useParams()
@@ -166,7 +167,7 @@ export default function ProductVariantManagementIndex() {
       dataIndex: "price",
       key: "price",
       width: 130,
-      render: (price) => <span className="text-green-700 font-semibold">PHP {Number(price).toLocaleString()}</span>,
+      render: (price) => <span className="text-green-700 font-semibold">{formatPeso(price)}</span>,
     },
     {
       title: "Stock",

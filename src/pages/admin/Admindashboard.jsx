@@ -13,6 +13,7 @@ import {
     Users,
 } from "lucide-react";
 import { getAdminDashboard } from "../../services/adminDashboardService";
+import { formatPeso } from "../../utils/currency";
 
 const greeting = () => {
     const hour = new Date().getHours();
@@ -342,7 +343,7 @@ export default function AdminDashboard() {
                                             </div>
                                             <div className="text-left sm:text-right">
                                                 <p className="text-sm font-semibold text-green-700">
-                                                    {firstVariant?.price ? `P${Number(firstVariant.price).toFixed(2)}` : "No price"}
+                                                    {firstVariant?.price ? formatPeso(firstVariant.price) : "No price"}
                                                 </p>
                                                 <p className="text-xs text-gray-400">Stock {totalStock}</p>
                                             </div>

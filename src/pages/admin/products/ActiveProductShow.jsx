@@ -3,11 +3,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { App, Carousel, Spin, Grid } from "antd";
 import { Package, Store, UserRound } from "lucide-react";
 import * as adminProductService from "../../../services/adminProductService";
+import { formatPeso } from "../../../utils/currency";
 import { getStorageUrl } from "../../../utils/storage";
-
-function formatCurrency(value) {
-    return `PHP ${Number(value || 0).toFixed(2)}`;
-}
 
 function getTotalStock(variants = []) {
     return variants.reduce((sum, variant) => sum + Number(variant?.stock || 0), 0);
@@ -127,7 +124,7 @@ export default function ActiveProductShow() {
                             </div>
                             <div className={`${isMobile ? "rounded-2xl border border-green-100 bg-green-50 px-4 py-3 text-left" : "text-right"}`}>
                                 <div className="text-sm text-gray-400">Lowest variant price</div>
-                                <div className="text-xl font-bold text-green-700">{formatCurrency(lowestPrice)}</div>
+                                <div className="text-xl font-bold text-green-700">{formatPeso(lowestPrice)}</div>
                             </div>
                         </div>
 
@@ -205,7 +202,7 @@ export default function ActiveProductShow() {
                                                     Price
                                                 </div>
                                                 <div className="mt-1 font-mono text-base font-semibold text-gray-900">
-                                                    {formatCurrency(variant.price)}
+                                                    {formatPeso(variant.price)}
                                                 </div>
                                             </div>
                                             <div className="text-right">
