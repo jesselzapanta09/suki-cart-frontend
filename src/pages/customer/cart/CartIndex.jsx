@@ -248,6 +248,7 @@ export default function CartIndex() {
 
     const isAllChecked = cartItems.length > 0 && cartItems.every(item => checkedItems[getCartItemKey(item)]);
     const isIndeterminate = cartItems.some(item => checkedItems[getCartItemKey(item)]) && !isAllChecked;
+    const contentBottomSpacing = totalItems > 0 ? "pb-44 md:pb-28" : "";
 
     return (
         <div className="mx-auto max-w-7xl space-y-4 px-3 pb-6 pt-3 sm:space-y-5 sm:px-4 sm:pb-8 sm:pt-4 lg:px-8">
@@ -266,7 +267,7 @@ export default function CartIndex() {
                     </div>
                 </div>
 
-                <div className="w-full space-y-4">
+                <div className={`w-full space-y-4 ${contentBottomSpacing}`}>
                     {loading ? (
                         <div className="min-h-64 flex items-center justify-center">
                             <Spin size="large" />
@@ -453,6 +454,7 @@ export default function CartIndex() {
                                         current={pagination.current}
                                         pageSize={pagination.pageSize}
                                         total={total}
+                                        showSizeChanger={false}
                                         onChange={handlePageChange}
                                     />
                                 </div>

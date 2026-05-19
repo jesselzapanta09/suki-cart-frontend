@@ -17,23 +17,23 @@ export function addProduct(formData) {
 }
 
 export function getSellerOrders(params = {}) {
-    return api.get('/seller/order-items', { params });
+    return api.get('/seller/orders', { params });
 }
 
-export function getSellerOrder(checkoutNo) {
-    return api.get(`/seller/order-items/${checkoutNo}`);
+export function getSellerOrder(orderUuid) {
+    return api.get(`/seller/orders/${orderUuid}`);
 }
 
-export function updateSellerOrderStatus(itemId, data) {
-    return api.put(`/seller/order-items/${itemId}/status`, data);
+export function updateSellerOrderStatus(orderUuid, data) {
+    return api.put(`/seller/orders/${orderUuid}/status`, data);
 }
 
-export function updateSellerOrderShipment(itemId, data) {
-    return api.put(`/seller/order-items/${itemId}/shipment`, data);
+export function updateSellerOrderShipment(orderUuid, data) {
+    return api.put(`/seller/orders/${orderUuid}/shipment`, data);
 }
 
-export function cancelSellerOrderItem(itemId, reason) {
-    return api.put(`/seller/order-items/${itemId}/cancel`, {
+export function cancelSellerOrder(orderUuid, reason) {
+    return api.put(`/seller/orders/${orderUuid}/cancel`, {
         cancellation_reason: reason,
     });
 }

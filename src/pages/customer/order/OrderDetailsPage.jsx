@@ -18,7 +18,6 @@ const statusConfig = {
 
 const statusSteps = ["pending", "processing", "shipped", "delivered"]
 
-const canCancelItem = (item) => item?.status === "pending"
 const getCancelledByLabel = (cancelledBy) => ({
     customer: "Customer",
     seller: "Seller",
@@ -26,47 +25,39 @@ const getCancelledByLabel = (cancelledBy) => ({
 }[cancelledBy] || "Unknown")
 
 export default function OrderDetailsPage() {
-    const { checkoutNo } = useParams()
+    const { orderUuid } = useParams()
+    const identifier = orderUuid
     const navigate = useNavigate()
     const { message } = App.useApp()
 
     const [order, setOrder] = useState(null)
-    const [selectedItem, setSelectedItem] = useState(null)
     const [loading, setLoading] = useState(true)
-    const [cancelTarget, setCancelTarget] = useState(null)
+    const [cancelOpen, setCancelOpen] = useState(false)
     const [cancellationReason, setCancellationReason] = useState("")
     const [cancellationLoading, setCancellationLoading] = useState(false)
     const [deliveryLoading, setDeliveryLoading] = useState(false)
     const [reviewModalOpen, setReviewModalOpen] = useState(false)
     const [reviewSubmitting, setReviewSubmitting] = useState(false)
+    const [selectedReviewItem, setSelectedReviewItem] = useState(null)
 
     const fetchOrderDetails = useCallback(async () => {
         setLoading(true)
         try {
-            const data = await orderService.getOrder(checkoutNo)
-            setOrder(data?.data?.group || null)
-            setSelectedItem(data?.data?.item || null)
+            const data = await orderService.getOrder(identifier)
+            setOrder(data?.data || null)
         } catch (err) {
             message.error(err.message || "Failed to fetch order details")
         } finally {
             setLoading(false)
         }
-    }, [checkoutNo, message])
+    }, [identifier, message])
 
     useEffect(() => {
         fetchOrderDetails()
     }, [fetchOrderDetails])
 
-    const rawItemGroups = useMemo(() => order?.item_groups || [], [order])
-    const itemGroups = useMemo(() => {
-        if (!selectedItem) return []
-        return rawItemGroups
-            .map((group) => ({ ...group, items: (group.items || []).filter((item) => item.id === selectedItem.id) }))
-            .filter((group) => group.items.length > 0)
-    }, [rawItemGroups, selectedItem])
-
     const closeCancelModal = () => {
-        setCancelTarget(null)
+        setCancelOpen(false)
         setCancellationReason("")
     }
 
@@ -78,42 +69,41 @@ export default function OrderDetailsPage() {
 
         setCancellationLoading(true)
         try {
-            const data = await orderService.cancelOrderItem(cancelTarget.item.id, cancellationReason)
-            setOrder(data?.data?.group || null)
-            setSelectedItem(data?.data?.item || null)
-            message.success("Item cancelled and totals recalculated")
+            const data = await orderService.cancelOrder(order?.uuid || identifier, cancellationReason)
+            setOrder(data?.data || null)
+            message.success("Order cancelled")
             closeCancelModal()
         } catch (err) {
-            message.error(err.message || "Failed to cancel")
+            message.error(err.message || "Failed to cancel order")
         } finally {
             setCancellationLoading(false)
         }
     }
 
-    const handleMarkDelivered = async () => {
-        if (!selectedItem?.id) return
+    const handleMarkReceived = async () => {
+        if (!order?.uuid && !identifier) return
 
         setDeliveryLoading(true)
         try {
-            const data = await orderService.markOrderItemDelivered(selectedItem.id)
-            setOrder(data?.data?.group || null)
-            setSelectedItem(data?.data?.item || null)
-            message.success("Product marked as delivered")
+            const data = await orderService.markOrderReceived(order?.uuid || identifier)
+            setOrder(data?.data || null)
+            message.success("Order marked as received")
         } catch (err) {
-            message.error(err.message || "Failed to mark product delivered")
+            message.error(err.message || "Failed to mark order received")
         } finally {
             setDeliveryLoading(false)
         }
     }
 
     const handleReviewSubmit = async (values) => {
-        if (!selectedItem?.id) return
+        if (!selectedReviewItem?.id) return
 
         setReviewSubmitting(true)
         try {
-            await orderService.createProductReview(selectedItem.id, values)
+            await orderService.createProductReview(selectedReviewItem.id, values)
             await fetchOrderDetails()
             setReviewModalOpen(false)
+            setSelectedReviewItem(null)
             message.success("Product review submitted")
         } catch (err) {
             message.error(err.message || "Failed to submit product review")
@@ -121,6 +111,21 @@ export default function OrderDetailsPage() {
             setReviewSubmitting(false)
         }
     }
+
+    const timelineItems = useMemo(() => {
+        const currentStatus = order?.status || "pending"
+        const currentStep = currentStatus === "cancelled" ? 0 : Math.max(statusSteps.indexOf(currentStatus), 0)
+
+        return statusSteps.map((status, index) => ({
+            status,
+            index,
+            isCompleted: index < currentStep,
+            isCurrent: status === currentStatus,
+            isUpcoming: index > currentStep,
+            Icon: statusConfig[status].icon,
+            label: statusConfig[status].label,
+        }))
+    }, [order?.status])
 
     if (loading) {
         return (
@@ -148,27 +153,7 @@ export default function OrderDetailsPage() {
         )
     }
 
-    const currentStatus = selectedItem?.status || order.status
-    const currentStep = currentStatus === "cancelled" ? 0 : Math.max(statusSteps.indexOf(currentStatus), 0)
-    const statusInfo = statusConfig[currentStatus] || statusConfig.pending
-    const StatusIcon = statusInfo.icon
-    const itemTotal = selectedItem ? Number(selectedItem.price || 0) * Number(selectedItem.quantity || 0) : 0
-    const timelineItems = statusSteps.map((status, index) => {
-        const isCompleted = index < currentStep
-        const isCurrent = status === currentStatus
-        const isUpcoming = index > currentStep
-        const Icon = statusConfig[status].icon
-
-        return {
-            status,
-            index,
-            isCompleted,
-            isCurrent,
-            isUpcoming,
-            Icon,
-            label: statusConfig[status].label,
-        }
-    })
+    const statusInfo = statusConfig[order.status] || statusConfig.pending
 
     return (
         <div className="mx-auto max-w-7xl space-y-4 px-3 pb-6 pt-3 sm:space-y-5 sm:px-4 sm:pb-8 sm:pt-4 lg:px-8">
@@ -181,7 +166,7 @@ export default function OrderDetailsPage() {
                     <ArrowLeft size={20} className="text-gray-700" />
                 </button>
                 <div className="min-w-0 flex-1">
-                    <h1 className="text-lg font-bold text-gray-900 sm:text-2xl md:text-3xl">Order #{String(order.id || "").slice(0, 8)}</h1>
+                    <h1 className="text-lg font-bold text-gray-900 sm:text-2xl md:text-3xl">Order #{String(order.uuid || order.id || "").slice(0, 8)}</h1>
                     <p className="mt-0.5 text-xs text-gray-500 sm:mt-1 sm:text-sm">{new Date(order.created_at).toLocaleString()}</p>
                 </div>
             </div>
@@ -189,15 +174,18 @@ export default function OrderDetailsPage() {
             <div className="mx-3 mb-4 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm sm:mx-0 sm:mb-6 sm:p-4 md:p-5">
                 <div className="mb-4 flex items-start justify-between gap-4 sm:mb-5">
                     <div>
-                        <h2 className="text-base font-bold text-gray-900 sm:text-lg">Product Timeline</h2>
+                        <h2 className="text-base font-bold text-gray-900 sm:text-lg">Order Timeline</h2>
                     </div>
+                    <Tag color={statusInfo.color} className="m-0 w-fit shrink-0">
+                        {statusInfo.label}
+                    </Tag>
                 </div>
 
-                {selectedItem?.status === "cancelled" ? (
+                {order.status === "cancelled" ? (
                     <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-xs text-red-700 sm:text-sm">
-                        <p>This product order was cancelled by {getCancelledByLabel(selectedItem?.cancelled_by)}.</p>
-                        {selectedItem?.cancellation_reason && (
-                            <p className="mt-2 text-xs text-red-600">Reason: {selectedItem.cancellation_reason}</p>
+                        <p>This store order was cancelled by {getCancelledByLabel(order.cancelled_by || "customer")}.</p>
+                        {order.cancellation_reason && (
+                            <p className="mt-2 text-xs text-red-600">Reason: {order.cancellation_reason}</p>
                         )}
                     </div>
                 ) : (
@@ -206,25 +194,25 @@ export default function OrderDetailsPage() {
                             <div key={item.status} className="relative shrink-0 sm:shrink">
                                 {item.index < timelineItems.length - 1 && (
                                     <div
-                                        className={`absolute top-6 left-[calc(50%+2rem)] right-4 hidden h-1 rounded-full md:block ${item.index < currentStep ? "bg-green-400" : "bg-gray-200"}`}
+                                        className={`absolute top-6 left-[calc(50%+2rem)] right-4 hidden h-1 rounded-full md:block ${item.index < timelineItems.findIndex((step) => step.isCurrent) ? "bg-green-400" : "bg-gray-200"}`}
                                     />
                                 )}
 
                                 <div
                                     className={`relative h-full rounded-xl border p-2.5 transition-all sm:rounded-2xl sm:p-4 ${item.isCurrent
-                                            ? "border-blue-500 bg-blue-50 shadow-sm ring-2 ring-blue-100"
-                                            : item.isCompleted
-                                                ? "border-green-200 bg-green-50"
-                                                : "border-gray-200 bg-gray-50"
+                                        ? "border-blue-500 bg-blue-50 shadow-sm ring-2 ring-blue-100"
+                                        : item.isCompleted
+                                            ? "border-green-200 bg-green-50"
+                                            : "border-gray-200 bg-gray-50"
                                         }`}
                                 >
                                     <div className="flex items-start gap-2 sm:gap-3">
                                         <div
                                             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg sm:h-12 sm:w-12 sm:rounded-2xl ${item.isCurrent
-                                                    ? "bg-blue-600 text-white"
-                                                    : item.isCompleted
-                                                        ? "bg-green-600 text-white"
-                                                        : "border border-gray-200 bg-white text-gray-400"
+                                                ? "bg-blue-600 text-white"
+                                                : item.isCompleted
+                                                    ? "bg-green-600 text-white"
+                                                    : "border border-gray-200 bg-white text-gray-400"
                                                 }`}
                                         >
                                             <item.Icon size={18} className="sm:h-5 sm:w-5" />
@@ -247,7 +235,6 @@ export default function OrderDetailsPage() {
                                                     Next
                                                 </span>
                                             )}
-                                            <p className="text-xs text-gray-500">{item.index + 1}/{timelineItems.length}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -274,112 +261,89 @@ export default function OrderDetailsPage() {
                         </div>
                     </div>
 
-                    <div className="space-y-3 sm:space-y-4">
-                        {itemGroups.map((group, index) => (
-                            <div key={group.store?.id || index} className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-                                <div className="flex flex-col items-start justify-between gap-2 border-b border-gray-100 bg-gray-50/70 p-3 sm:flex-row sm:items-center sm:gap-3 sm:p-4 md:p-5">
-                                    <div className="min-w-0">
-                                        <h2 className="text-sm font-bold text-gray-950 sm:text-base">Ordered Item&apos;s</h2>
-                                        <p className="text-xs text-gray-500">{order.active_items_count || 0} active | {order.cancelled_items_count || 0} cancelled</p>
-                                    </div>
-                                    <p className="shrink-0 text-lg font-bold text-green-700 sm:text-xl">{formatPeso(group.subtotal)}</p>
-                                </div>
+                    <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+                        <div className="flex flex-col items-start justify-between gap-2 border-b border-gray-100 bg-gray-50/70 p-3 sm:flex-row sm:items-center sm:gap-3 sm:p-4 md:p-5">
+                            <div className="min-w-0">
+                                <h2 className="text-sm font-bold text-gray-950 sm:text-base">{order.store?.store_name || "Store Order"}</h2>
+                                <p className="text-xs text-gray-500">{order.order_items?.length || 0} item{(order.order_items?.length || 0) !== 1 ? "s" : ""}</p>
+                            </div>
+                            <p className="shrink-0 text-lg font-bold text-green-700 sm:text-xl">{formatPeso(order.total_price)}</p>
+                        </div>
 
-                                {(group.shipment?.courier_name || group.items?.[0]?.courier_name) && (
-                                    <div className="mx-3 mt-3 rounded-xl border border-cyan-100 bg-cyan-50 p-3 text-xs text-cyan-800 sm:mx-4 sm:text-sm md:mx-5 md:mt-4">
-                                        <p><span className="font-semibold">Courier:</span> {group.shipment?.courier_name || group.items?.[0]?.courier_name}</p>
-                                        {(group.shipment?.tracking_number || group.items?.[0]?.tracking_number) && (
-                                            <p><span className="font-semibold">Tracking Number:</span> {group.shipment?.tracking_number || group.items?.[0]?.tracking_number}</p>
-                                        )}
-                                    </div>
+                        {order.shipment?.courier_name && (
+                            <div className="mx-3 mt-3 rounded-xl border border-cyan-100 bg-cyan-50 p-3 text-xs text-cyan-800 sm:mx-4 sm:text-sm md:mx-5 md:mt-4">
+                                <p><span className="font-semibold">Courier:</span> {order.shipment.courier_name}</p>
+                                {order.shipment?.tracking_number && (
+                                    <p><span className="font-semibold">Tracking Number:</span> {order.shipment.tracking_number}</p>
                                 )}
+                            </div>
+                        )}
 
-                                <div className="divide-y divide-gray-100">
-                                    {(group.items || []).map((item) => (
-                                        <div key={item.id} className="p-3 sm:p-4 md:p-5">
-                                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[70px_1fr] md:grid-cols-[80px_1fr]">
-                                                <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-100 sm:h-17.5 sm:w-17.5 md:h-20 md:w-20">
-                                                    {item.product?.images?.length ? (
-                                                        <img
-                                                            src={getStorageUrl(item.product.images[0].full_url || item.product.images[0].image_path)}
-                                                            alt={item.product.name}
-                                                            className="h-full w-full object-cover"
-                                                        />
-                                                    ) : (
-                                                        <Package size={28} className="text-gray-400" />
-                                                    )}
-                                                </div>
+                        <div className="divide-y divide-gray-100">
+                            {(order.order_items || []).map((item) => (
+                                <div key={item.id} className="p-3 sm:p-4 md:p-5">
+                                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-[80px_1fr]">
+                                        <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gray-100 sm:h-20 sm:w-20">
+                                            {item.product?.images?.length ? (
+                                                <img
+                                                    src={getStorageUrl(item.product.images[0].full_url || item.product.images[0].image_path)}
+                                                    alt={item.product.name}
+                                                    className="h-full w-full object-cover"
+                                                />
+                                            ) : (
+                                                <Package size={28} className="text-gray-400" />
+                                            )}
+                                        </div>
 
-                                                <div className="min-w-0">
-                                                    <div className="flex items-start justify-between gap-3">
-                                                        <h3 className="min-w-0 flex-1 line-clamp-2 text-sm font-semibold text-gray-900 sm:text-base">
-                                                            {item.product?.name}
-                                                        </h3>
-                                                        <Tag
-                                                            color={statusConfig[item.status]?.color || "default"}
-                                                            className="m-0 w-fit shrink-0 text-xs"
-                                                        >
-                                                            {statusConfig[item.status]?.label || item.status}
-                                                        </Tag>
-                                                    </div>
+                                        <div className="min-w-0">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div className="min-w-0 flex-1">
+                                                    <h3 className="line-clamp-2 text-sm font-semibold text-gray-900 sm:text-base">
+                                                        {item.product?.name}
+                                                    </h3>
                                                     {item.variant && <p className="mt-1 text-xs text-gray-500 sm:text-sm">Variant: {item.variant.name}</p>}
-                                                    <div className="mt-2 flex items-center justify-between gap-2">
-                                                        <p className="text-xs text-gray-600 sm:text-sm">Qty: {item.quantity}</p>
-                                                        {canCancelItem(item) && (
-                                                            <Button
-                                                                danger
-                                                                size="small"
-                                                                icon={<X size={14} />}
-                                                                onClick={() => setCancelTarget({ type: "item", item })}
-                                                                className="h-8 shrink-0 px-2.5 text-xs sm:h-9 sm:px-3 sm:text-sm"
-                                                            >
-                                                                Cancel
-                                                            </Button>
-                                                        )}
-                                                    </div>
+                                                    <p className="mt-1 text-xs text-gray-500 sm:text-sm">Qty: {item.quantity}</p>
+                                                    <p className="mt-1 text-xs text-gray-500 sm:text-sm">Line total: {formatPeso(item.line_total)}</p>
+                                                    {item.message ? <p className="mt-2 text-xs text-gray-600 sm:text-sm">Message: {item.message}</p> : null}
                                                 </div>
+                                                {/* <Tag color={statusConfig[item.status]?.color || "default"} className="m-0 w-fit shrink-0 text-xs">
+                                                    {statusConfig[item.status]?.label || item.status}
+                                                </Tag> */}
+                                            </div>
+
+                                            <div className="mt-3 flex flex-wrap items-center gap-3">
+                                                {item.can_review ? (
+                                                    <Button
+                                                        size="small"
+                                                        icon={<Star size={14} />}
+                                                        onClick={() => {
+                                                            setSelectedReviewItem(item)
+                                                            setReviewModalOpen(true)
+                                                        }}
+                                                    >
+                                                        Rate Product
+                                                    </Button>
+                                                ) : null}
+                                                {item.review ? (
+                                                    <div className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                                                        <div className="flex items-center gap-2">
+                                                            <Rate disabled value={item.review.rating} />
+                                                        </div>
+                                                        <p className="mt-1">{item.review.review}</p>
+                                                    </div>
+                                                ) : null}
                                             </div>
                                         </div>
-                                    ))}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-
-                    {order.message && (
-                        <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 sm:p-5">
-                            <h3 className="mb-2 font-semibold text-gray-900">Message</h3>
-                            <p className="text-sm text-gray-800">{order.message}</p>
-                        </div>
-                    )}
-
-                    {selectedItem?.review && (
-                        <div className="rounded-2xl border border-amber-100 bg-white p-4 shadow-sm sm:p-5">
-                            <div className="flex items-start gap-2.5 sm:gap-3">
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 ring-1 ring-amber-100">
-                                    <Star size={18} className="text-amber-600" />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                    <div className="flex flex-wrap items-center gap-3">
-                                        <h3 className="font-semibold text-gray-900">Your Review</h3>
-                                        <Rate disabled value={selectedItem.review.rating} />
                                     </div>
-                                    <p className="mt-2 text-xs text-gray-500">
-                                        Variant: {selectedItem.review.variant_name || selectedItem.variant?.name || "Default"}
-                                    </p>
-                                    <p className="mt-3 text-sm text-gray-700">{selectedItem.review.review}</p>
-                                    <p className="mt-3 text-xs text-gray-400">
-                                        Submitted {new Date(selectedItem.review.created_at).toLocaleString()}
-                                    </p>
                                 </div>
-                            </div>
+                            ))}
                         </div>
-                    )}
+                    </div>
                 </div>
 
                 <div className="px-3 sm:px-0">
                     <div className="space-y-3 sm:space-y-4 md:space-y-5 lg:sticky lg:top-4">
-                        {selectedItem?.status === "shipped" ? (
+                        {order.can_mark_received ? (
                             <div className="rounded-2xl border border-green-100 bg-white p-3 shadow-sm sm:p-4 md:p-5">
                                 <div className="flex items-start gap-2.5 sm:gap-3">
                                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-green-100 sm:h-11 sm:w-11 sm:rounded-2xl">
@@ -388,39 +352,42 @@ export default function OrderDetailsPage() {
                                     <div className="min-w-0 flex-1">
                                         <h3 className="text-sm font-bold text-gray-900 sm:text-base">Confirm Delivery</h3>
                                         <p className="mt-1 text-xs text-gray-600 sm:text-sm">
-                                            Mark this product as received after you get it from the courier.
+                                            Mark this whole order as received after all items arrive.
                                         </p>
                                         <Button
                                             type="primary"
                                             block
                                             icon={<CheckCircle size={16} />}
                                             loading={deliveryLoading}
-                                            onClick={handleMarkDelivered}
+                                            onClick={handleMarkReceived}
                                             className="mt-4 h-10 text-base font-semibold sm:h-11"
                                         >
-                                            Received Product
+                                            Received Order
                                         </Button>
                                     </div>
                                 </div>
                             </div>
-                        ) : selectedItem?.can_review ? (
-                            <div className="rounded-2xl border border-amber-100 bg-white p-3 shadow-sm sm:p-4 md:p-5">
+                        ) : null}
+
+                        {order.can_cancel ? (
+                            <div className="rounded-2xl border border-red-100 bg-white p-3 shadow-sm sm:p-4 md:p-5">
                                 <div className="flex items-start gap-2.5 sm:gap-3">
-                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-100 sm:h-11 sm:w-11 sm:rounded-2xl">
-                                        <Star size={20} className="text-amber-700 sm:h-5.5 sm:w-5.5" />
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-100 sm:h-11 sm:w-11 sm:rounded-2xl">
+                                        <X size={20} className="text-red-700 sm:h-5.5 sm:w-5.5" />
                                     </div>
                                     <div className="min-w-0 flex-1">
-                                        <h3 className="text-sm font-bold text-gray-900 sm:text-base">Rate This Product</h3>
+                                        <h3 className="text-sm font-bold text-gray-900 sm:text-base">Cancel Order</h3>
                                         <p className="mt-1 text-xs text-gray-600 sm:text-sm">
-                                            Share your feedback about this order item.
+                                            This will cancel the full store order and restore all item stock.
                                         </p>
                                         <Button
+                                            danger
                                             block
-                                            icon={<Star size={16} />}
-                                            onClick={() => setReviewModalOpen(true)}
+                                            icon={<X size={16} />}
+                                            onClick={() => setCancelOpen(true)}
                                             className="mt-4 h-10 text-base font-semibold sm:h-11"
                                         >
-                                            Rate Product
+                                            Cancel Order
                                         </Button>
                                     </div>
                                 </div>
@@ -435,19 +402,15 @@ export default function OrderDetailsPage() {
                                 <div className="min-w-0">
                                     <h3 className="text-sm font-bold text-gray-900 sm:text-base">Receipt Summary</h3>
                                     <p className="text-xs text-gray-500">
-                                        {order.active_items_count || 0} active | {order.cancelled_items_count || 0} cancelled
+                                        {order.order_items?.length || 0} item{(order.order_items?.length || 0) !== 1 ? "s" : ""}
                                     </p>
                                 </div>
                             </div>
 
                             <div className="mb-6 space-y-3">
                                 <div className="flex justify-between text-sm">
-                                    <span className="text-gray-600">Item Total</span>
-                                    <span className="font-medium text-gray-800">{formatPeso(itemTotal)}</span>
-                                </div>
-                                <div className="flex justify-between text-sm">
                                     <span className="text-gray-600">Subtotal</span>
-                                    <span className="font-medium text-gray-800">{formatPeso(order.price)}</span>
+                                    <span className="font-medium text-gray-800">{formatPeso(order.subtotal)}</span>
                                 </div>
                                 <div className="flex justify-between text-sm">
                                     <span className="text-gray-600">Shipping</span>
@@ -470,8 +433,8 @@ export default function OrderDetailsPage() {
             </div>
 
             <Modal
-                title="Cancel Product Order"
-                open={Boolean(cancelTarget)}
+                title="Cancel Store Order"
+                open={cancelOpen}
                 onCancel={closeCancelModal}
                 onOk={handleCancel}
                 okText="Cancel Order"
@@ -479,7 +442,7 @@ export default function OrderDetailsPage() {
             >
                 <div className="space-y-4">
                     <p className="text-sm text-gray-600">
-                        Please provide a reason for cancelling {cancelTarget?.item?.product?.name || "this item"}.
+                        Please provide a reason for cancelling this order from {order.store?.store_name || "the store"}.
                     </p>
                     <Input.TextArea
                         placeholder="Enter cancellation reason..."
@@ -493,9 +456,12 @@ export default function OrderDetailsPage() {
 
             <ReviewProductModal
                 open={reviewModalOpen}
-                item={selectedItem}
+                item={selectedReviewItem}
                 submitting={reviewSubmitting}
-                onCancel={() => setReviewModalOpen(false)}
+                onCancel={() => {
+                    setReviewModalOpen(false)
+                    setSelectedReviewItem(null)
+                }}
                 onSubmit={handleReviewSubmit}
             />
         </div>

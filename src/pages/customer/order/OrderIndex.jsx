@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import { Button, Empty, Input, Pagination, Spin, Tag, App } from "antd"
 import { useNavigate } from "react-router-dom"
 import { Package, Search, ChevronRight, X, Clock, CheckCircle, Truck, ShoppingBag, Store } from "lucide-react"
@@ -15,22 +15,6 @@ const statusConfig = {
 }
 
 const statusTabs = ["all", "pending", "processing", "shipped", "delivered", "cancelled"]
-const statusSortOrder = {
-    pending: 0,
-    processing: 1,
-    shipped: 2,
-    delivered: 3,
-    cancelled: 4,
-}
-
-const getStoreName = (store) => store?.store_name || store?.name || "Unknown Seller"
-const getStoreKey = (store) => store?.id || store?.uuid || "unknown-store"
-const getItemTotal = (item) => item?.item_total ?? ((Number(item?.price || 0) * Number(item?.quantity || 0)) + Number(item?.shipping_cost || 0))
-const getStatusRank = (status) => statusSortOrder[status] ?? Number.MAX_SAFE_INTEGER
-const getCreatedAtValue = (value) => {
-    const timestamp = new Date(value || 0).getTime()
-    return Number.isNaN(timestamp) ? 0 : timestamp
-}
 
 export default function OrderIndex() {
     const navigate = useNavigate()
@@ -72,78 +56,6 @@ export default function OrderIndex() {
         return () => clearTimeout(searchTimer.current)
     }, [activeStatus, fetchOrders, pagination.pageSize, search])
 
-    const itemRows = useMemo(() => {
-        return orders.flatMap((order) =>
-            (order.order_items || order.item_groups?.flatMap((group) => group.items || []) || []).map((item) => ({
-                ...order,
-                order_item: item,
-            }))
-        )
-    }, [orders])
-
-    const storeGroups = useMemo(() => {
-        const groups = new Map()
-
-        itemRows.forEach((order) => {
-            const item = order.order_item
-            const store = item?.store || item?.product?.store || null
-            const storeKey = getStoreKey(store)
-
-            if (!groups.has(storeKey)) {
-                groups.set(storeKey, {
-                    key: storeKey,
-                    store,
-                    items: [],
-                    subtotal: 0,
-                })
-            }
-
-            const group = groups.get(storeKey)
-            group.items.push(order)
-            group.subtotal += getItemTotal(item)
-        })
-
-        return Array.from(groups.values())
-            .map((group) => {
-                const sortedItems = [...group.items].sort((leftOrder, rightOrder) => {
-                    if (activeStatus === "all") {
-                        const statusDiff = getStatusRank(leftOrder.order_item?.status) - getStatusRank(rightOrder.order_item?.status)
-                        if (statusDiff !== 0) {
-                            return statusDiff
-                        }
-                    }
-
-                    return getCreatedAtValue(rightOrder.created_at) - getCreatedAtValue(leftOrder.created_at)
-                })
-
-                return {
-                    ...group,
-                    items: sortedItems,
-                    sortRank: sortedItems.reduce((lowestRank, order) => {
-                        return Math.min(lowestRank, getStatusRank(order.order_item?.status))
-                    }, Number.MAX_SAFE_INTEGER),
-                    latestCreatedAt: sortedItems.reduce((latestValue, order) => {
-                        return Math.max(latestValue, getCreatedAtValue(order.created_at))
-                    }, 0),
-                }
-            })
-            .sort((leftGroup, rightGroup) => {
-                if (activeStatus === "all") {
-                    const statusDiff = leftGroup.sortRank - rightGroup.sortRank
-                    if (statusDiff !== 0) {
-                        return statusDiff
-                    }
-                }
-
-                return rightGroup.latestCreatedAt - leftGroup.latestCreatedAt
-            })
-    }, [activeStatus, itemRows])
-
-    const activeTabTotal = activeStatus === "all" ? (counts.all ?? total) : (counts[activeStatus] ?? 0)
-    const paginationTotal = search.trim() ? total : activeTabTotal
-    const totalItems = paginationTotal
-    const shouldShowPagination = paginationTotal > pagination.pageSize
-
     const handleSearch = (value) => {
         clearTimeout(searchTimer.current)
         searchTimer.current = setTimeout(() => setSearch(value), 200)
@@ -161,6 +73,11 @@ export default function OrderIndex() {
         }))
     }
 
+    const activeTabTotal = activeStatus === "all" ? (counts.all ?? total) : (counts[activeStatus] ?? 0)
+    const paginationTotal = search.trim() ? total : activeTabTotal
+    const totalOrders = paginationTotal
+    const shouldShowPagination = paginationTotal > pagination.pageSize
+
     return (
         <div className="mx-auto max-w-7xl space-y-4 px-3 pb-6 pt-3 sm:space-y-5 sm:px-4 sm:pb-8 sm:pt-4 lg:px-8">
 
@@ -172,7 +89,7 @@ export default function OrderIndex() {
                     <div className="min-w-0">
                         <h1 className="font-sora text-lg font-bold text-gray-900 sm:text-xl">Your Orders</h1>
                         <p className="mt-1 text-xs leading-5 text-gray-500 sm:text-sm">
-                            {totalItems} order item{totalItems !== 1 ? "s" : ""}
+                            {totalOrders} order{totalOrders !== 1 ? "s" : ""}
                         </p>
                     </div>
                 </div>
@@ -181,7 +98,7 @@ export default function OrderIndex() {
             <div className="my-4 rounded-xl border border-gray-100 bg-white p-3.5 shadow-sm sm:mb-6 sm:p-4 md:p-5">
                 <div className="flex flex-col gap-3 sm:gap-4">
                     <Input
-                        placeholder="Search by order number or product"
+                        placeholder="Search by order ID or product"
                         prefix={<Search size={16} className="text-gray-400" />}
                         onChange={(e) => handleSearch(e.target.value)}
                         className="customer-orders-search rounded-xl text-base"
@@ -199,8 +116,8 @@ export default function OrderIndex() {
                                     type="button"
                                     onClick={() => handleStatusChange(status)}
                                     className={`flex min-h-11 shrink-0 items-center justify-between gap-3 rounded-lg border px-4 py-2.5 text-left text-sm font-medium transition-colors ${isActive
-                                            ? "border-green-600 bg-green-600 text-white"
-                                            : "border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300 hover:bg-gray-100"
+                                        ? "border-green-600 bg-green-600 text-white"
+                                        : "border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300 hover:bg-gray-100"
                                         }`}
                                     style={{ minWidth: "max-content" }}
                                 >
@@ -232,102 +149,100 @@ export default function OrderIndex() {
                         </Button>
                     </div>
                 </div>
-            ) : itemRows.length === 0 ? (
-                <div className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm sm:p-10">
-                    <Empty description={activeStatus === "all" ? "No product orders found" : `No ${statusConfig[activeStatus]?.label?.toLowerCase() || activeStatus} items found`} />
-                </div>
             ) : (
                 <div className="space-y-4 sm:space-y-5">
+                    {orders.map((order) => {
+                        const statusInfo = statusConfig[order.status] || statusConfig.pending
+                        const StatusIcon = statusInfo.icon
+                        const previewItem = order.order_items?.[0]
 
-                    {storeGroups.map((group) => (
-                        <div key={group.key} className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
-                            <div className="flex flex-col justify-between gap-3 border-b border-gray-100 bg-gray-50/70 p-4 md:flex-row md:items-center md:p-5">
-                                <div className="flex min-w-0 items-start gap-3">
-                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-100">
-                                        <Store size={20} className="text-green-700" />
+                        return (
+                            <div key={order.uuid || order.id} className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+                                <div className="flex flex-col justify-between gap-3 border-b border-gray-100 bg-gray-50/70 p-4 md:flex-row md:items-center md:p-5">
+                                    <div className="flex min-w-0 items-start gap-3">
+                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-100">
+                                            <Store size={20} className="text-green-700" />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <h2 className="truncate font-bold text-green-950">{order.store?.store_name || "Unknown Seller"}</h2>
+                                            <p className="text-xs text-gray-500">
+                                                {order.order_items?.length || 0} item{(order.order_items?.length || 0) !== 1 ? "s" : ""} in this order
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div className="min-w-0">
-                                        <h2 className="truncate font-bold text-green-950">{getStoreName(group.store)}</h2>
-                                        <p className="text-xs text-gray-500">
-                                            {group.items.length} order item{group.items.length !== 1 ? "s" : ""} from this store
-                                        </p>
+
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <Tag color={statusInfo.color} className="m-0 w-fit shrink-0">
+                                            <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                                                <StatusIcon size={14} />
+                                                <span>{statusInfo.label}</span>
+                                            </span>
+                                        </Tag>
+                                        <div className="text-left md:text-right">
+                                            <p className="text-xs text-gray-500">Order total</p>
+                                            <p className="font-bold text-green-700">{formatPeso(order.total_price)}</p>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div className="text-left md:text-right">
-                                    <p className="text-xs text-gray-500">Store total</p>
-                                    <p className="font-bold text-green-700">{formatPeso(group.subtotal)}</p>
-                                </div>
-                            </div>
+                                <div className="grid gap-4 p-4 md:p-5 lg:grid-cols-[minmax(0,1fr)_240px]">
+                                    <div className="flex items-start gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
+                                        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gray-100 sm:h-18 sm:w-18">
+                                            {previewItem?.product?.images?.length ? (
+                                                <img
+                                                    src={getStorageUrl(previewItem.product.images[0].full_url || previewItem.product.images[0].image_path)}
+                                                    alt={previewItem.product.name}
+                                                    className="h-full w-full object-cover"
+                                                />
+                                            ) : (
+                                                <Package size={20} className="text-gray-400" />
+                                            )}
+                                        </div>
+                                        <div className="min-w-0 flex-1 self-start">
+                                            <p className="line-clamp-2 text-sm font-semibold text-gray-900">
+                                                {previewItem?.product?.name || "Order items"}
+                                            </p>
+                                            <p className="mt-1 text-xs leading-relaxed text-gray-500 sm:text-sm">
+                                                Subtotal {formatPeso(order.subtotal)} | Shipping {formatPeso(order.shipping_cost)}
+                                            </p>
+                                            <p className="mt-1 text-xs text-gray-500 sm:text-sm">
+                                                {previewItem?.variant?.name ? `First item: ${previewItem.variant.name}` : "Store order"}
+                                            </p>
+                                            {(order.order_items?.length || 0) > 1 ? (
+                                                <p className="mt-2 text-xs text-gray-400">
+                                                    Plus {(order.order_items?.length || 0) - 1} more item{(order.order_items?.length || 0) - 1 !== 1 ? "s" : ""}
+                                                </p>
+                                            ) : null}
+                                        </div>
+                                    </div>
 
-                            <div className="divide-y divide-gray-100">
-                                {group.items.map((order) => {
-                                    const item = order.order_item
-                                    const statusInfo = statusConfig[item?.status] || statusConfig.pending
-                                    const StatusIcon = statusInfo.icon
-                                    const itemTotal = getItemTotal(item)
-
-                                    return (
-                                        <div key={`${order.id}-${item?.id}`} className="grid gap-4 p-4 md:p-5 lg:grid-cols-[minmax(0,1fr)_240px]">
-                                            <div className="flex items-start gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
-                                                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gray-100 sm:h-18 sm:w-18">
-                                                    {item?.product?.images?.length ? (
-                                                        <img
-                                                            src={getStorageUrl(item.product.images[0].full_url || item.product.images[0].image_path)}
-                                                            alt={item.product.name}
-                                                            className="h-full w-full object-cover"
-                                                        />
-                                                    ) : (
-                                                        <Package size={20} className="text-gray-400" />
-                                                    )}
-                                                </div>
-                                                <div className="min-w-0 flex-1 self-start">
-                                                    <p className="line-clamp-2 text-sm font-semibold text-gray-900">{item?.product?.name}</p>
-                                                    <p className="mt-1 text-xs leading-relaxed text-gray-500 sm:text-sm">
-                                                        Price {formatPeso(item?.price)} | Shipping {formatPeso(item?.shipping_cost)}
-                                                    </p>
-                                                    <p className="mt-1 text-xs text-gray-500 sm:text-sm">Qty {item?.quantity || 0}</p>
-                                                    {item?.variant?.name && (
-                                                        <p className="mt-1 text-xs text-gray-500 sm:text-sm">Variant: {item.variant.name}</p>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            <div className="flex flex-col justify-between gap-3 rounded-xl border border-gray-100 bg-white p-3">
-                                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                                    <div className="min-w-0">
-                                                        <p className="text-sm font-bold text-gray-950">Order #{String(order.id || "").slice(0, 8)}</p>
-                                                        <p className="text-xs text-gray-500">{new Date(order.created_at).toLocaleString()}</p>
-                                                    </div>
-                                                    <Tag color={statusInfo.color} className="m-0 w-fit shrink-0">
-                                                        <span className="inline-flex items-center gap-1 whitespace-nowrap">
-                                                            <StatusIcon size={14} />
-                                                            <span>{statusInfo.label}</span>
-                                                        </span>
-                                                    </Tag>
-                                                </div>
-
-                                                <div className="flex items-end justify-between gap-3">
-                                                    <div>
-                                                        <p className="text-xs text-gray-500">Item total</p>
-                                                        <p className="mt-1 text-base font-bold text-green-700 sm:text-lg">{formatPeso(itemTotal)}</p>
-                                                    </div>
-                                                    <Button
-                                                        icon={<ChevronRight size={16} />}
-                                                        onClick={() => navigate(`/customer/orders/items/${order?.checkout_no || order?.id}`)}
-                                                        className="h-11 rounded-lg px-3 text-sm font-medium"
-                                                        aria-label="View order details"
-                                                    >
-                                                        View
-                                                    </Button>
-                                                </div>
+                                    <div className="flex flex-col justify-between gap-3 rounded-xl border border-gray-100 bg-white p-3">
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <div className="min-w-0">
+                                                <p className="text-sm font-bold text-gray-950">Order #{String(order.uuid || order.id || "").slice(0, 8)}</p>
+                                                <p className="text-xs text-gray-500">{new Date(order.created_at).toLocaleString()}</p>
                                             </div>
                                         </div>
-                                    )
-                                })}
+
+                                        <div className="flex items-end justify-between gap-3">
+                                            <div>
+                                                <p className="text-xs text-gray-500">Items</p>
+                                                <p className="mt-1 text-base font-bold text-green-700 sm:text-lg">{order.order_items?.length || 0}</p>
+                                            </div>
+                                            <Button
+                                                icon={<ChevronRight size={16} />}
+                                                onClick={() => navigate(`/customer/orders/${order?.uuid || order?.id}`)}
+                                                className="h-11 rounded-lg px-3 text-sm font-medium"
+                                                aria-label="View order details"
+                                            >
+                                                View
+                                            </Button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        )
+                    })}
                 </div>
             )}
 

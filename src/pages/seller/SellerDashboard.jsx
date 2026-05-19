@@ -265,7 +265,7 @@ export default function SellerDashboard() {
                         <StatCard icon={<Boxes size={20} />} label="Products" value={stats.total_products} helper={`${stats.active_products ?? 0} active listings`} tone="green" />
                         <StatCard icon={<BadgeCheck size={20} />} label="Orders" value={stats.total_orders} helper={`${stats.pending_orders ?? 0} waiting to process`} tone="blue" />
                         <StatCard icon={<Package size={20} />} label="Stock Units" value={stats.total_stock} helper={`${stats.out_of_stock_products ?? 0} out of stock`} tone="amber" />
-                        <StatCard icon={<Store size={20} />} label="Revenue" value={formatPeso(stats.lifetime_revenue)} helper={`${stats.delivered_orders ?? 0} delivered items`} tone="emerald" />
+                        <StatCard icon={<Store size={20} />} label="Revenue" value={formatPeso(stats.lifetime_revenue)} helper={`${stats.delivered_orders ?? 0} delivered orders`} tone="emerald" />
                     </>
                 )}
             </div>
@@ -274,7 +274,7 @@ export default function SellerDashboard() {
                 <div className="lg:col-span-2">
                     <SectionCard
                         title="Recent Orders"
-                        subtitle="Latest item-level orders from your store"
+                        subtitle="Latest store-level orders from your store"
                         action={
                             storeVerified ? (
                                 <Link to="/seller/orders">
@@ -300,7 +300,7 @@ export default function SellerDashboard() {
                                             <div className="min-w-0">
                                                 <div className="flex flex-wrap items-center gap-2">
                                                     <p className="truncate text-sm font-semibold text-gray-900">
-                                                        Order #{String(order.checkout_no || "").slice(0, 8)}
+                                                        Order #{String(order.uuid || order.id || "").slice(0, 8)}
                                                     </p>
                                                     <Tag color={
                                                         order.status === "delivered" ? "green"
@@ -316,17 +316,17 @@ export default function SellerDashboard() {
                                                 <p className="mt-1 text-xs text-gray-400">{formatDateTime(order.created_at)}</p>
                                             </div>
                                             <div className="text-left sm:text-right">
-                                                <p className="text-sm font-semibold text-green-700">{formatPeso(order.item_total)}</p>
-                                                <p className="text-xs text-gray-400">Qty {order.quantity}</p>
+                                                <p className="text-sm font-semibold text-green-700">{formatPeso(order.total_price)}</p>
+                                                <p className="text-xs text-gray-400">{order.item_count} item{order.item_count !== 1 ? "s" : ""}</p>
                                             </div>
                                         </div>
 
                                         <div className="mt-3 flex items-start gap-3 rounded-xl bg-gray-50 p-3">
                                             <div className="flex h-15 w-15 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white">
-                                                {order.product?.images?.[0]?.image_path ? (
+                                                {order.preview_item?.product?.images?.[0]?.image_path ? (
                                                     <img
-                                                        src={getStorageUrl(order.product.images[0].image_path)}
-                                                        alt={order.product.name}
+                                                        src={getStorageUrl(order.preview_item.product.images[0].image_path)}
+                                                        alt={order.preview_item?.product?.name}
                                                         className="h-full w-full object-cover"
                                                     />
                                                 ) : (
@@ -334,11 +334,12 @@ export default function SellerDashboard() {
                                                 )}
                                             </div>
                                             <div className="min-w-0 flex-1">
-                                                <p className="truncate text-sm font-semibold text-gray-900">{order.product?.name || "Product"}</p>
-                                                {order.variant?.name ? <p className="mt-1 text-xs text-gray-500">Variant: {order.variant.name}</p> : null}
+                                                <p className="truncate text-sm font-semibold text-gray-900">{order.preview_item?.product?.name || "Order items"}</p>
+                                                {order.preview_item?.variant?.name ? <p className="mt-1 text-xs text-gray-500">Variant: {order.preview_item.variant.name}</p> : null}
                                                 <p className="mt-1 text-xs text-gray-500">
-                                                    Price {formatPeso(order.price)} | Shipping {formatPeso(order.shipping_cost)}
+                                                    Subtotal {formatPeso(order.subtotal)} | Shipping {formatPeso(order.shipping_cost)}
                                                 </p>
+                                                {order.item_count > 1 ? <p className="mt-1 text-xs text-gray-400">Plus {order.item_count - 1} more item{order.item_count - 1 !== 1 ? "s" : ""}</p> : null}
                                             </div>
                                         </div>
                                     </div>

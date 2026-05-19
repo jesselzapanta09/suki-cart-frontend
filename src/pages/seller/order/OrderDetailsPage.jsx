@@ -3,7 +3,7 @@ import { App, Button, Empty, Form, Input, Modal, Spin, Tag } from "antd"
 import { ArrowLeft, CheckCircle, Clock, Package, Truck, User, X, MapPin, ShoppingBag } from "lucide-react"
 import { useNavigate, useParams } from "react-router-dom"
 import {
-    cancelSellerOrderItem,
+    cancelSellerOrder,
     getSellerOrder,
     updateSellerOrderStatus,
     updateSellerOrderShipment,
@@ -26,21 +26,19 @@ const statusOptions = [
     {
         value: "processing",
         label: "Preparing to ship",
-        description: "Confirm that this item is packed and being readied for handoff.",
     },
     {
         value: "shipped",
         label: "Shipped out",
-        description: "Add courier and tracking details before the customer follows the parcel.",
     },
 ]
+
 const nextStatusMap = {
     pending: "processing",
     processing: "shipped",
 }
 
 const customerName = (customer) => `${customer?.firstname || ""} ${customer?.lastname || ""}`.trim() || customer?.email || "Customer"
-const canCancelItem = (item) => item?.status === "pending"
 const getCancelledByLabel = (cancelledBy) => ({
     customer: "Customer",
     seller: "Seller",
@@ -48,7 +46,8 @@ const getCancelledByLabel = (cancelledBy) => ({
 }[cancelledBy] || "Unknown")
 
 export default function OrderDetailsPage() {
-    const { checkoutNo } = useParams()
+    const { orderUuid } = useParams()
+    const identifier = orderUuid
     const navigate = useNavigate()
     const { message } = App.useApp()
     const [form] = Form.useForm()
@@ -56,24 +55,14 @@ export default function OrderDetailsPage() {
     const [order, setOrder] = useState(null)
     const [loading, setLoading] = useState(true)
     const [savingStatus, setSavingStatus] = useState(false)
-    const [cancelTarget, setCancelTarget] = useState(null)
+    const [cancelOpen, setCancelOpen] = useState(false)
     const [cancelReason, setCancelReason] = useState("")
     const [cancelLoading, setCancelLoading] = useState(false)
 
-    const storeOrder = useMemo(() => order?.store_order || {}, [order])
-    const selectedItem = useMemo(() => {
-        const items = storeOrder.items || []
-        return items[0] || null
-    }, [storeOrder.items])
-    const currentStatus = selectedItem?.status || storeOrder.status || "pending"
-    const suggestedStatus = nextStatusMap[currentStatus] || (currentStatus === "shipped" ? "shipped" : currentStatus)
+    const currentStatus = order?.status || "pending"
+    const suggestedStatus = nextStatusMap[currentStatus] || currentStatus
     const availableStatusOptions = useMemo(() => {
         const nextStatus = nextStatusMap[currentStatus]
-
-        if (!nextStatus) {
-            return []
-        }
-
         return statusOptions.filter((option) => option.value === nextStatus)
     }, [currentStatus])
     const selectedStatus = Form.useWatch("status", form)
@@ -81,45 +70,46 @@ export default function OrderDetailsPage() {
     const fetchOrder = useCallback(async () => {
         setLoading(true)
         try {
-            const data = await getSellerOrder(checkoutNo)
-            setOrder(data?.data)
+            const data = await getSellerOrder(identifier)
+            setOrder(data?.data || null)
         } catch (err) {
             message.error(err.message || "Failed to fetch order")
         } finally {
             setLoading(false)
         }
-    }, [checkoutNo, message])
+    }, [identifier, message])
 
     useEffect(() => {
         fetchOrder()
     }, [fetchOrder])
 
     useEffect(() => {
-        if (!selectedItem) {
+        if (!order) {
             return
         }
 
         form.setFieldsValue({
             status: suggestedStatus,
-            courier_name: selectedItem?.courier_name || "",
-            tracking_number: selectedItem?.tracking_number || "",
+            courier_name: order?.shipment?.courier_name || "",
+            tracking_number: order?.shipment?.tracking_number || "",
         })
-    }, [form, selectedItem, suggestedStatus])
+    }, [form, order, suggestedStatus])
 
     const handleStatusSave = async () => {
         try {
-            const fieldsToValidate = selectedStatus === "shipped"
+            const activeStatus = selectedStatus || suggestedStatus
+            const fieldsToValidate = activeStatus === "shipped"
                 ? ["status", "courier_name", "tracking_number"]
                 : ["status"]
             const values = await form.validateFields(fieldsToValidate)
 
             setSavingStatus(true)
             const data = currentStatus === "shipped"
-                ? await updateSellerOrderShipment(selectedItem?.id, {
+                ? await updateSellerOrderShipment(order?.uuid || identifier, {
                     courier_name: values.courier_name,
                     tracking_number: values.tracking_number,
                 })
-                : await updateSellerOrderStatus(selectedItem?.id, {
+                : await updateSellerOrderStatus(order?.uuid || identifier, {
                     status: values.status,
                     ...(values.status === "shipped"
                         ? {
@@ -129,7 +119,7 @@ export default function OrderDetailsPage() {
                         : {}),
                 })
 
-            setOrder(data?.data)
+            setOrder(data?.data || null)
             message.success(currentStatus === "shipped" ? "Shipment details updated" : "Order status updated")
         } catch (err) {
             if (!err?.errorFields) {
@@ -141,11 +131,11 @@ export default function OrderDetailsPage() {
     }
 
     const closeCancelModal = () => {
-        setCancelTarget(null)
+        setCancelOpen(false)
         setCancelReason("")
     }
 
-    const handleCancelItem = async () => {
+    const handleCancelOrder = async () => {
         if (!cancelReason.trim()) {
             message.warning("Please provide a cancellation reason")
             return
@@ -153,12 +143,12 @@ export default function OrderDetailsPage() {
 
         setCancelLoading(true)
         try {
-            const data = await cancelSellerOrderItem(cancelTarget.id, cancelReason)
-            setOrder(data?.data)
-            message.success("Item cancelled")
+            const data = await cancelSellerOrder(order?.uuid || identifier, cancelReason)
+            setOrder(data?.data || null)
+            message.success("Order cancelled")
             closeCancelModal()
         } catch (err) {
-            message.error(err.message || "Failed to cancel item")
+            message.error(err.message || "Failed to cancel order")
         } finally {
             setCancelLoading(false)
         }
@@ -192,23 +182,15 @@ export default function OrderDetailsPage() {
 
     const statusInfo = statusConfig[currentStatus] || statusConfig.pending
     const currentStep = currentStatus === "cancelled" ? 0 : Math.max(statusSteps.indexOf(currentStatus), 0)
-    const timelineItems = statusSteps.map((status, index) => {
-        const isCompleted = index < currentStep
-        const isCurrent = status === currentStatus
-        const isUpcoming = index > currentStep
-        const Icon = statusConfig[status].icon
-
-        return {
-            status,
-            index,
-            isCompleted,
-            isCurrent,
-            isUpcoming,
-            Icon,
-            label: statusConfig[status].label,
-        }
-    })
-    const StatusIcon = statusInfo.icon
+    const timelineItems = statusSteps.map((status, index) => ({
+        status,
+        index,
+        isCompleted: index < currentStep,
+        isCurrent: status === currentStatus,
+        isUpcoming: index > currentStep,
+        Icon: statusConfig[status].icon,
+        label: statusConfig[status].label,
+    }))
     const activeStatus = selectedStatus || suggestedStatus
     const activeStatusInfo = statusConfig[activeStatus] || statusInfo
     const showShipmentFields = activeStatus === "shipped"
@@ -229,7 +211,7 @@ export default function OrderDetailsPage() {
                         <ArrowLeft size={20} className="text-gray-700" />
                     </button>
                     <div className="flex-1 min-w-0">
-                        <h1 className="text-lg sm:text-2xl md:text-3xl font-bold text-gray-900">Order #{String(order.id || "").slice(0, 8)}</h1>
+                        <h1 className="text-lg sm:text-2xl md:text-3xl font-bold text-gray-900">Order #{String(order.uuid || order.id || "").slice(0, 8)}</h1>
                         <p className="text-xs sm:text-sm text-gray-500 mt-0.5 sm:mt-1">{new Date(order.created_at).toLocaleString()}</p>
                     </div>
                 </div>
@@ -237,15 +219,15 @@ export default function OrderDetailsPage() {
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 sm:p-4 md:p-5 mb-4 sm:mb-6 mx-3 sm:mx-0">
                     <div className="flex items-start justify-between gap-4 mb-4 sm:mb-5">
                         <div>
-                            <h2 className="text-base sm:text-lg font-bold text-gray-900">Product Timeline</h2>
+                            <h2 className="text-base sm:text-lg font-bold text-gray-900">Order Timeline</h2>
                         </div>
                     </div>
 
-                    {selectedItem?.status === "cancelled" ? (
+                    {order.status === "cancelled" ? (
                         <div className="rounded-xl bg-red-50 border border-red-100 p-3 text-xs sm:text-sm text-red-700">
-                            <p>This product order was cancelled by {getCancelledByLabel(selectedItem?.cancelled_by)}.</p>
-                            {selectedItem?.cancellation_reason && (
-                                <p className="mt-2 text-xs text-red-600">Reason: {selectedItem.cancellation_reason}</p>
+                            <p>This store order was cancelled by {getCancelledByLabel(order.cancelled_by)}.</p>
+                            {order.cancellation_reason && (
+                                <p className="mt-2 text-xs text-red-600">Reason: {order.cancellation_reason}</p>
                             )}
                         </div>
                     ) : (
@@ -254,8 +236,7 @@ export default function OrderDetailsPage() {
                                 <div key={item.status} className="relative shrink-0 sm:shrink">
                                     {item.index < timelineItems.length - 1 && (
                                         <div
-                                            className={`hidden md:block absolute top-6 left-[calc(50%+2rem)] right-4 h-1 rounded-full ${item.index < currentStep ? "bg-green-400" : "bg-gray-200"
-                                                }`}
+                                            className={`hidden md:block absolute top-6 left-[calc(50%+2rem)] right-4 h-1 rounded-full ${item.index < currentStep ? "bg-green-400" : "bg-gray-200"}`}
                                         />
                                     )}
 
@@ -296,9 +277,6 @@ export default function OrderDetailsPage() {
                                                         Next
                                                     </span>
                                                 )}
-                                                <p className="text-xs text-gray-500">
-                                                    {item.index + 1}/{timelineItems.length}
-                                                </p>
                                             </div>
                                         </div>
                                     </div>
@@ -341,18 +319,25 @@ export default function OrderDetailsPage() {
                             <div className="p-3 sm:p-4 md:p-5 border-b border-gray-100 bg-gray-50/70 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3">
                                 <div className="min-w-0">
                                     <h2 className="text-sm sm:text-base font-bold text-gray-950">Ordered Item/s</h2>
-                                    <p className="text-xs text-gray-500">{storeOrder.active_items_count || 0} active · {storeOrder.cancelled_items_count || 0} cancelled</p>
+                                    <p className="text-xs text-gray-500">{order.order_items?.length || 0} item{(order.order_items?.length || 0) !== 1 ? "s" : ""}</p>
                                 </div>
-                                <p className="text-lg sm:text-xl font-bold text-green-700 shrink-0">{formatPeso(storeOrder.subtotal)}</p>
+                                <p className="text-lg sm:text-xl font-bold text-green-700 shrink-0">{formatPeso(order.total_price)}</p>
                             </div>
 
-                            <div className="divide-y divide-gray-100 overflow-x-auto">
-                                {([selectedItem].filter(Boolean)).map(item => (
-                                    <div key={item.id} className="p-3 sm:p-4 md:p-5">
-                                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[70px_1fr] md:grid-cols-[80px_1fr]">
+                            {order.shipment?.courier_name && (
+                                <div className="mx-3 mt-3 rounded-xl border border-cyan-100 bg-cyan-50 p-3 text-xs text-cyan-800 sm:mx-4 sm:text-sm md:mx-5 md:mt-4">
+                                    <p><span className="font-semibold">Courier:</span> {order.shipment.courier_name}</p>
+                                    {order.shipment?.tracking_number && (
+                                        <p><span className="font-semibold">Tracking Number:</span> {order.shipment.tracking_number}</p>
+                                    )}
+                                </div>
+                            )}
 
-                                            {/* Image */}
-                                            <div className="h-24 w-24 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden shrink-0 sm:h-17.5 sm:w-17.5 md:h-20 md:w-20">
+                            <div className="divide-y divide-gray-100 overflow-x-auto">
+                                {(order.order_items || []).map((item) => (
+                                    <div key={item.id} className="p-3 sm:p-4 md:p-5">
+                                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[80px_1fr]">
+                                            <div className="h-24 w-24 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden shrink-0 sm:h-20 sm:w-20">
                                                 {item.product?.images?.length ? (
                                                     <img
                                                         src={getStorageUrl(item.product.images[0].full_url || item.product.images[0].image_path)}
@@ -364,44 +349,36 @@ export default function OrderDetailsPage() {
                                                 )}
                                             </div>
 
-                                            {/* Content */}
                                             <div className="min-w-0">
                                                 <div className="flex items-start justify-between gap-3">
-                                                    <h3 className="min-w-0 flex-1 font-semibold text-sm sm:text-base text-gray-900 line-clamp-2">
-                                                        {item.product?.name}
-                                                    </h3>
+                                                    <div className="min-w-0 flex-1">
+                                                        <h3 className="font-semibold text-sm sm:text-base text-gray-900 line-clamp-2">
+                                                            {item.product?.name}
+                                                        </h3>
+                                                        {item.variant && (
+                                                            <p className="text-xs sm:text-sm text-gray-500 mt-1">
+                                                                Variant: {item.variant.name}
+                                                            </p>
+                                                        )}
+                                                        <p className="text-xs sm:text-sm text-gray-600 mt-1">
+                                                            Qty: {item.quantity}
+                                                        </p>
+                                                        <p className="text-xs sm:text-sm text-gray-600 mt-1">
+                                                            Line total: {formatPeso(item.line_total)}
+                                                        </p>
+                                                        {item.message ? (
+                                                            <p className="text-xs sm:text-sm text-gray-600 mt-2">
+                                                                Message: {item.message}
+                                                            </p>
+                                                        ) : null}
+                                                    </div>
 
-                                                    <Tag
+                                                    {/* <Tag
                                                         color={statusConfig[item.status]?.color || "default"}
                                                         className="m-0 w-fit shrink-0 text-xs"
                                                     >
                                                         {statusConfig[item.status]?.label || item.status}
-                                                    </Tag>
-                                                </div>
-
-                                                {item.variant && (
-                                                    <p className="text-xs sm:text-sm text-gray-500 mt-1">
-                                                        Variant: {item.variant.name}
-                                                    </p>
-                                                )}
-
-                                                {/* Qty + Cancel inline */}
-                                                <div className="mt-2 flex items-center justify-between gap-2">
-                                                    <p className="text-xs sm:text-sm text-gray-600">
-                                                        Qty: {item.quantity}
-                                                    </p>
-
-                                                    {canCancelItem(item) && (
-                                                        <Button
-                                                            danger
-                                                            size="small"
-                                                            icon={<X size={14} />}
-                                                            onClick={() => setCancelTarget(item)}
-                                                            className="text-xs sm:text-sm h-8 sm:h-9 px-2.5 sm:px-3 shrink-0 active:scale-95 transition-transform"
-                                                        >
-                                                            Cancel
-                                                        </Button>
-                                                    )}
+                                                    </Tag> */}
                                                 </div>
                                             </div>
                                         </div>
@@ -413,7 +390,7 @@ export default function OrderDetailsPage() {
 
                     <div className="px-3 sm:px-0">
                         <div className="space-y-3 sm:space-y-4 md:space-y-5 lg:sticky lg:top-4">
-                            {selectedItem?.status === "delivered" ? (
+                            {order.status === "delivered" ? (
                                 <div className="bg-white rounded-2xl border border-green-100 shadow-sm p-3 sm:p-4 md:p-5">
                                     <div className="flex items-start gap-2.5 sm:gap-3">
                                         <div className="w-10 sm:w-11 h-10 sm:h-11 rounded-lg sm:rounded-2xl bg-green-100 flex items-center justify-center shrink-0">
@@ -422,12 +399,12 @@ export default function OrderDetailsPage() {
                                         <div className="min-w-0">
                                             <h3 className="font-bold text-sm sm:text-base text-gray-900">Order Delivered</h3>
                                             <p className="text-xs sm:text-sm text-gray-600 mt-1">
-                                                This product order has already been delivered. No further seller action is needed.
+                                                This store order has already been delivered. No further seller action is needed.
                                             </p>
                                         </div>
                                     </div>
                                 </div>
-                            ) : selectedItem?.status === "cancelled" ? (
+                            ) : order.status === "cancelled" ? (
                                 <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-3 sm:p-4 md:p-5">
                                     <div className="flex items-start gap-2.5 sm:gap-3">
                                         <div className="w-10 sm:w-11 h-10 sm:h-11 rounded-lg sm:rounded-2xl bg-red-100 flex items-center justify-center shrink-0">
@@ -436,7 +413,7 @@ export default function OrderDetailsPage() {
                                         <div className="min-w-0">
                                             <h3 className="font-bold text-sm sm:text-base text-gray-900">Order Cancelled</h3>
                                             <p className="text-xs sm:text-sm text-gray-600 mt-1">
-                                                This product order has already been cancelled. No further seller action is needed.
+                                                This store order has already been cancelled. No further seller action is needed.
                                             </p>
                                         </div>
                                     </div>
@@ -449,7 +426,7 @@ export default function OrderDetailsPage() {
                                         </div>
                                         <div className="min-w-0">
                                             <h3 className="font-bold text-sm sm:text-base text-gray-900">Seller Actions</h3>
-                                            <p className="text-xs text-gray-500">Update this product order only.</p>
+                                            <p className="text-xs text-gray-500">Update the whole store order.</p>
                                         </div>
                                     </div>
 
@@ -506,11 +483,22 @@ export default function OrderDetailsPage() {
                                                 </div>
                                             )}
 
+                                            {order.can_cancel !== false && currentStatus === "pending" ? (
+                                                <Button
+                                                    danger
+                                                    block
+                                                    onClick={() => setCancelOpen(true)}
+                                                    className="h-10 sm:h-11 text-base font-semibold active:scale-95 transition-transform"
+                                                >
+                                                    Cancel Order
+                                                </Button>
+                                            ) : null}
+
                                             <Button
                                                 type="primary"
                                                 block
                                                 loading={savingStatus}
-                                                disabled={!selectedItem || !activeStatus}
+                                                disabled={!activeStatus || availableStatusOptions.length === 0 && !isShipmentEditing}
                                                 onClick={handleStatusSave}
                                                 className="h-10 sm:h-11 text-base font-semibold active:scale-95 transition-transform"
                                             >
@@ -520,25 +508,23 @@ export default function OrderDetailsPage() {
                                     </Form>
                                 </div>
                             )}
-
                         </div>
                     </div>
                 </div>
             </div>
 
             <Modal
-                title="Cancel Item"
-                open={Boolean(cancelTarget)}
+                title="Cancel Order"
+                open={cancelOpen}
                 onCancel={closeCancelModal}
-                onOk={handleCancelItem}
-                okText="Cancel Item"
+                onOk={handleCancelOrder}
+                okText="Cancel Order"
                 okButtonProps={{ danger: true, loading: cancelLoading }}
                 centered
-                width={Math.min(500, window.innerWidth - 32)}
             >
                 <div className="space-y-3 sm:space-y-4">
                     <p className="text-xs sm:text-sm text-gray-600">
-                        Please provide a reason for cancelling {cancelTarget?.product?.name || "this item"}.
+                        Please provide a reason for cancelling this store order.
                     </p>
                     <Input.TextArea
                         placeholder="Enter cancellation reason..."

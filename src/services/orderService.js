@@ -2,31 +2,31 @@ import api from './api'
 
 // Order operations (authenticated customer only)
 export function getOrders(params = {}) {
-    return api.get('/customer/order-items', { params })
+    return api.get('/customer/orders', { params })
 }
 
-export function getOrder(checkoutNo) {
-    return api.get(`/customer/order-items/${checkoutNo}`)
+export function getOrder(orderUuid) {
+    return api.get(`/customer/orders/${orderUuid}`)
 }
 
 export function createOrder(orderData) {
-    return api.post('/customer/order-items', orderData)
+    return api.post('/customer/orders', orderData)
 }
 
 export function calculateShipping(shippingData) {
-    return api.post('/customer/order-items/calculate-shipping', shippingData)
+    return api.post('/customer/orders/calculate-shipping', shippingData)
 }
 
-export function markOrderItemDelivered(itemId) {
-    return api.put(`/customer/order-items/${itemId}/delivered`)
+export function markOrderReceived(orderUuid) {
+    return api.put(`/customer/orders/${orderUuid}/received`)
 }
 
-export function cancelOrderItem(itemId, reason) {
-    return api.put(`/customer/order-items/${itemId}/cancel`, {
+export function cancelOrder(orderUuid, reason) {
+    return api.put(`/customer/orders/${orderUuid}/cancel`, {
         cancellation_reason: reason,
     })
 }
 
 export function createProductReview(itemId, payload) {
-    return api.post(`/customer/order-items/${itemId}/review`, payload)
+    return api.post(`/customer/orders/items/${itemId}/review`, payload)
 }
