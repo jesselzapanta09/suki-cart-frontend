@@ -19,6 +19,11 @@
     
     <script>
       (function () {
+        window.__sukiPendingOpenUrls = window.__sukiPendingOpenUrls || [];
+        window.handleOpenURL = window.handleOpenURL || function (url) {
+          window.__sukiPendingOpenUrls.push(url);
+        };
+
         var redirect = sessionStorage.getItem('redirect');
         if (redirect) {
           sessionStorage.removeItem('redirect');

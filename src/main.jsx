@@ -16,6 +16,8 @@ import {
 } from "./services/pushMobile";
 
 import { getStoredToken } from "./utils/auth";
+import { navigateWithinApp } from "./services/inAppNavigation";
+import { resolveDeepLinkRoute } from "./services/deepLinks";
 
 const firebaseConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -25,6 +27,43 @@ const firebaseConfig = {
     messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
     appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
+
+function applyIncomingDeepLink(rawUrl) {
+    const route = resolveDeepLinkRoute(rawUrl);
+
+    if (!route) {
+        return;
+    }
+
+    navigateWithinApp(route, { replace: true });
+}
+
+function installCordovaDeepLinkHandler() {
+    if (typeof window === "undefined") {
+        return;
+    }
+
+    const pendingUrls = Array.isArray(window.__sukiPendingOpenUrls)
+        ? [...window.__sukiPendingOpenUrls]
+        : [];
+
+    window.__sukiPendingOpenUrls = [];
+    window.handleOpenURL = (url) => {
+        window.__sukiPendingOpenUrls = window.__sukiPendingOpenUrls || [];
+        window.__sukiPendingOpenUrls.push(url);
+
+        window.setTimeout(() => {
+            const queuedUrl = window.__sukiPendingOpenUrls.shift();
+            if (queuedUrl) {
+                applyIncomingDeepLink(queuedUrl);
+            }
+        }, 0);
+    };
+
+    pendingUrls.forEach((url) => applyIncomingDeepLink(url));
+}
+
+installCordovaDeepLinkHandler();
 
 async function initializeWebPush() {
     try {

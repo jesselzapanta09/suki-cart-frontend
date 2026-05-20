@@ -29,6 +29,7 @@ import RegisterSeller   from "./pages/auth/RegisterSeller.jsx";
 import VerifyEmail      from "./pages/auth/Verifyemail.jsx";
 import ForgotPassword   from "./pages/auth/Forgotpassword.jsx";
 import ResetPassword    from "./pages/auth/Resetpassword.jsx";
+import AppOpenGate      from "./pages/auth/AppOpenGate.jsx";
 import EditProfile      from "./pages/profile/EditProfile.jsx";
 
 // Pages - Admin
@@ -119,6 +120,8 @@ export default function App() {
                                     </Route>
 
                                     {/* Standalone */}
+                                    <Route path="/open-app/verify-email" element={<AppOpenGate action="verifyEmail" />} />
+                                    <Route path="/open-app/reset-password" element={<AppOpenGate action="resetPassword" />} />
                                     <Route path="/verify-email"    element={<VerifyEmail />} />
                                     <Route path="/forgot-password" element={<ForgotPassword />} />
                                     <Route path="/reset-password"  element={<ResetPassword />} />

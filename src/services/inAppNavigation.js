@@ -1,4 +1,4 @@
-function isCordovaNavigationRuntime() {
+export function isCordovaNavigationRuntime() {
     if (typeof window === 'undefined') {
         return false;
     }
