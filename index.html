@@ -19,6 +19,18 @@
     
     <script>
       (function () {
+        function isCordovaHashRuntime() {
+          return !!window.cordova || window.location.protocol === 'file:' || document.URL.startsWith('file:');
+        }
+
+        function toHashRoute(route) {
+          if (typeof route !== 'string' || !route) {
+            return '#/';
+          }
+
+          return route.charAt(0) === '#' ? route : '#' + route;
+        }
+
         window.__sukiPendingOpenUrls = window.__sukiPendingOpenUrls || [];
         window.handleOpenURL = window.handleOpenURL || function (url) {
           window.__sukiPendingOpenUrls.push(url);
@@ -27,7 +39,15 @@
         var redirect = sessionStorage.getItem('redirect');
         if (redirect) {
           sessionStorage.removeItem('redirect');
-          history.replaceState(null, null, redirect);
+
+          if (isCordovaHashRuntime()) {
+            var hashRoute = toHashRoute(redirect);
+            if (window.location.hash !== hashRoute) {
+              window.location.replace(hashRoute);
+            }
+          } else {
+            history.replaceState(null, null, redirect);
+          }
         }
       })();
     </script>

@@ -6,6 +6,7 @@ import { useCart } from "../../../context/CartContext";
 import { useAuth } from "../../../context/auth-context";
 import * as orderService from "../../../services/orderService";
 import addressService from "../../../services/addressService";
+import { getProfile } from "../../../services/profileService";
 import { formatPeso } from "../../../utils/currency";
 import { getStorageUrl } from "../../../utils/storage";
 
@@ -22,6 +23,7 @@ export default function CheckoutIndex() {
     const [itemMessages, setItemMessages] = useState({});
     const [checkoutLoading, setCheckoutLoading] = useState(false);
     const [locations, setLocations] = useState([]);
+    const [locationsLoading, setLocationsLoading] = useState(true);
     const [locationOptions, setLocationOptions] = useState([]);
     const [shippingData, setShippingData] = useState(null);
     const [shippingLoading, setShippingLoading] = useState(false);
@@ -65,14 +67,55 @@ export default function CheckoutIndex() {
             navigate("/customer/cart");
             return;
         }
-        
-        if (user?.locations) {
-            setLocations(user.locations);
-        }
 
         // Calculate shipping fees
         calculateShippingFees();
-    }, [user, items, navigate, calculateShippingFees]);
+    }, [items, navigate, calculateShippingFees]);
+
+    useEffect(() => {
+        let active = true;
+
+        const loadLocations = async () => {
+            setLocationsLoading(true);
+
+            const fallbackLocations = Array.isArray(user?.locations) ? user.locations : [];
+
+            if (fallbackLocations.length && active) {
+                setLocations(fallbackLocations);
+            }
+
+            try {
+                const data = await getProfile();
+                if (!active) {
+                    return;
+                }
+
+                const profileLocations = Array.isArray(data?.user?.locations) ? data.user.locations : [];
+                setLocations(profileLocations);
+            } catch (err) {
+                if (!active) {
+                    return;
+                }
+
+                if (fallbackLocations.length) {
+                    setLocations(fallbackLocations);
+                } else {
+                    setLocations([]);
+                    message.error(err.message || "Failed to load delivery addresses.");
+                }
+            } finally {
+                if (active) {
+                    setLocationsLoading(false);
+                }
+            }
+        };
+
+        loadLocations();
+
+        return () => {
+            active = false;
+        };
+    }, [user?.locations, message]);
 
     useEffect(() => {
         if (locations.length !== 1 || selectedLocation) {
@@ -93,7 +136,7 @@ export default function CheckoutIndex() {
                     const resolved = await addressService.resolveLocationParts(loc);
                     return {
                         value: loc.id,
-                        label: addressService.formatLocation(resolved),
+                        label: addressService.formatLocation(resolved) || "Saved address",
                     };
                 })
             );
@@ -116,6 +159,15 @@ export default function CheckoutIndex() {
             active = false;
         };
     }, [locations]);
+
+    useEffect(() => {
+        if (!selectedLocation || locations.some((loc) => loc.id === selectedLocation)) {
+            return;
+        }
+
+        setSelectedLocation(null);
+        form.setFieldValue("delivery_location", undefined);
+    }, [locations, selectedLocation, form]);
 
     const getPrice = (item) => {
         const price = item.price ?? item.variant?.price ?? 0;
@@ -256,6 +308,9 @@ export default function CheckoutIndex() {
                                 >
                                     <Select
                                         placeholder="Select delivery location"
+                                        loading={locationsLoading}
+                                        disabled={locationsLoading || locationOptions.length === 0}
+                                        notFoundContent={locationsLoading ? "Loading addresses..." : "No saved address found"}
                                         onChange={(value) => {
                                             setSelectedLocation(value);
                                             form.setFieldValue('delivery_location', value);
@@ -263,6 +318,19 @@ export default function CheckoutIndex() {
                                         options={locationOptions}
                                     />
                                 </Form.Item>
+
+                                {!locationsLoading && locationOptions.length === 0 ? (
+                                    <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-800">
+                                        No saved delivery address found. Please add one in your profile before placing an order.
+                                        <Button
+                                            type="link"
+                                            className="px-0 pl-1"
+                                            onClick={() => navigate("/customer/edit-profile")}
+                                        >
+                                            Open profile
+                                        </Button>
+                                    </div>
+                                ) : null}
 
                                 <Form.Item
                                     name="address_extra"
@@ -514,7 +582,7 @@ export default function CheckoutIndex() {
                                 size="large"
                                 className="flex-1"
                                 loading={checkoutLoading}
-                                disabled={!selectedLocation || shippingLoading}
+                                disabled={!selectedLocation || shippingLoading || locationsLoading}
                                 onClick={handlePlaceOrder}
                                 icon={<ShoppingBag size={16} />}
                             >

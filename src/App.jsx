@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ConfigProvider, App as AntApp } from "antd";
 import { AuthProvider } from "./context/AuthContext.jsx";
 import { useAuth } from "./context/auth-context";
@@ -7,6 +7,7 @@ import { CartProvider } from "./context/CartContext.jsx";
 import { NotificationProvider } from "./context/NotificationContext.jsx";
 import ProtectedRoute from "./routes/ProtectedRoute.jsx";
 import ScrollToTop from "./components/ScrollToTop.jsx";
+import { shouldUseCordovaHashRouting } from "./services/inAppNavigation.js";
 
 // Layouts
 import HomeLayout   from "./layouts/HomeLayout.jsx";
@@ -92,13 +93,15 @@ function RoleRedirect() {
 }
 
 export default function App() {
+    const Router = shouldUseCordovaHashRouting() ? HashRouter : BrowserRouter;
+
     return (
         <ConfigProvider theme={antTheme}>
             <AntApp>
                 <AuthProvider>
                     <NotificationProvider>
                         <CartProvider>
-                            <BrowserRouter>
+                            <Router>
                                 <ScrollToTop />
                                 <Routes>
                                     {/* Public - Home */}
@@ -175,7 +178,7 @@ export default function App() {
                                     {/* Fallback */}
                                     <Route path="*" element={<Navigate to="/" replace />} />
                                 </Routes>
-                            </BrowserRouter>
+                            </Router>
                     </CartProvider>
                     </NotificationProvider>
                 </AuthProvider>
