@@ -1,6 +1,7 @@
 import { isCordovaNavigationRuntime } from "./inAppNavigation";
 
 export const APP_URL_SCHEME = "sukicart";
+export const ANDROID_APP_PACKAGE = "suki.cart.android";
 
 const ACTION_TO_WEB_ROUTE = {
     verifyEmail: "/verify-email",
@@ -70,6 +71,14 @@ export function buildAppDeepLink(action, params = {}) {
     return `${APP_URL_SCHEME}://${normalizedPath}${queryString ? `?${queryString}` : ""}`;
 }
 
+export function buildAndroidIntentDeepLink(action, params = {}) {
+    const route = buildWebAuthRoute(action, params);
+    const [pathname, queryString = ""] = route.split("?");
+    const normalizedPath = pathname.replace(/^\/+/, "");
+    const intentTarget = `${normalizedPath}${queryString ? `?${queryString}` : ""}`;
+    return `intent://${intentTarget}#Intent;scheme=${APP_URL_SCHEME};package=${ANDROID_APP_PACKAGE};end`;
+}
+
 export function resolveDeepLinkRoute(rawUrl) {
     if (!rawUrl || typeof rawUrl !== "string") {
         return null;
@@ -99,4 +108,13 @@ export function shouldAttemptAppOpen() {
 
     const userAgent = window.navigator?.userAgent ?? "";
     return /Android|iPhone|iPad|iPod/i.test(userAgent);
+}
+
+export function isAndroidDevice() {
+    if (typeof window === "undefined") {
+        return false;
+    }
+
+    const userAgent = window.navigator?.userAgent ?? "";
+    return /Android/i.test(userAgent);
 }

@@ -3,8 +3,10 @@ import { App, Button } from "antd";
 import { Smartphone, ArrowRight, ExternalLink } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
+    buildAndroidIntentDeepLink,
     buildAppDeepLink,
     buildWebAuthRoute,
+    isAndroidDevice,
     shouldAttemptAppOpen,
 } from "../../services/deepLinks";
 import { isCordovaNavigationRuntime } from "../../services/inAppNavigation";
@@ -39,6 +41,11 @@ export default function AppOpenGate({ action }) {
         () => buildAppDeepLink(action, token ? { token } : {}),
         [action, token],
     );
+    const androidIntentDeepLink = useMemo(
+        () => buildAndroidIntentDeepLink(action, token ? { token } : {}),
+        [action, token],
+    );
+    const openAppUrl = isAndroidDevice() ? androidIntentDeepLink : appDeepLink;
 
     useEffect(() => {
         if (!token) {
@@ -55,16 +62,8 @@ export default function AppOpenGate({ action }) {
             return;
         }
 
-        const timeoutId = window.setTimeout(() => {
-            if (document.visibilityState === "visible") {
-                navigate(browserRoute, { replace: true });
-            }
-        }, 1400);
-
-        window.location.assign(appDeepLink);
-
-        return () => window.clearTimeout(timeoutId);
-    }, [appDeepLink, browserRoute, navigate, token]);
+        window.location.assign(openAppUrl);
+    }, [browserRoute, navigate, openAppUrl, token]);
 
     const openApp = () => {
         if (!token) {
@@ -72,7 +71,7 @@ export default function AppOpenGate({ action }) {
             return;
         }
 
-        window.location.assign(appDeepLink);
+        window.location.assign(openAppUrl);
     };
 
     const continueInBrowser = () => {
@@ -103,7 +102,7 @@ export default function AppOpenGate({ action }) {
                 </div>
 
                 <p className="text-gray-400 text-sm mt-4">
-                    If the app does not open automatically, use one of the buttons above.
+                    If the app does not open automatically, tap "Open SukiCart App" first. Use the browser button only if you want to continue on web.
                 </p>
             </div>
         </div>
